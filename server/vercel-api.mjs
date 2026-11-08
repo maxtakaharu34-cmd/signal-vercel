@@ -1,0 +1,54 @@
+import {handleSiteApi} from './site-api.mjs';
+
+const COOKIE='__Host-fx-owner';
+const json=(data,status=200)=>Response.json(data,{status,headers:{'cache-control':'private, no-store'}});
+const encode=bytes=>Buffer.from(bytes).toString('base64url');
+const decode=value=>Buffer.from(value,'base64url');
+const email=value=>String(value??'').trim().toLowerCase();
+const cookie=(value,age=28800)=>`${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+const configured=env=>env.SUPABASE_URL?.startsWith('https://')&&env.SUPABASE_PUBLISHABLE_KEY&&env.DEMO_BRIDGE_SECRET?.length>=64&&env.OWNER_EMAIL&&env.SITE_ORIGIN;
+async function sessionKey(env){return crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',new TextEncoder().encode('vercel-owner-cookie-v1:'+env.DEMO_BRIDGE_SECRET)),{name:'AES-GCM'},false,['encrypt','decrypt'])}
+async function seal(value,env){const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(COOKIE)},await sessionKey(env),new TextEncoder().encode(JSON.stringify(value)));return encode(iv)+'.'+encode(cipher)}
+async function unseal(request,env){try{const value=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);if(!value||value.length>6000)return null;const [iv,cipher,extra]=value.split('.');if(extra||!iv||!cipher)return null;const clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(iv),additionalData:new TextEncoder().encode(COOKIE)},await sessionKey(env),decode(cipher));const data=JSON.parse(new TextDecoder().decode(clear));return data.until>Date.now()&&data.id&&data.access&&data.refresh?data:null}catch{return null}}
+async function auth(env,path,method='GET',body,token,fetcher=fetch){
+ const response=await fetcher(env.SUPABASE_URL+'/auth/v1/'+path,{method,headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(12000)});
+ const data=response.status===204?{}:await response.json();if(!response.ok)throw Object.assign(Error(response.status===429?'少し時間をおいてから再度お試しください。':'認証できませんでした。メールアドレスと認証コードを確認してください。'),{status:response.status===429?429:401});return data;
+}
+async function input(request){const text=await request.text();if(text.length>2048)throw Object.assign(Error('入力が大きすぎます。'),{status:413});try{return JSON.parse(text)}catch{throw Object.assign(Error('入力内容を確認してください。'),{status:400})}}
+function owner(user,env){return user?.id&&user.email_confirmed_at&&!user.is_anonymous&&email(user.email)===email(env.OWNER_EMAIL)}
+
+/** Node/Vercel adapter. Identity headers from public callers are never trusted. */
+export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=handleSiteApi}={}){
+ const url=new URL(original.url);url.pathname=url.pathname.replace(/\/$/,'');const headers=new Headers(original.headers);headers.delete('x-signal-owner-service');headers.delete('oai-authenticated-user-id');headers.delete('oai-authenticated-user-email');
+ const request=new Request(url,original);for(const name of [...request.headers.keys()])if(!headers.has(name))request.headers.delete(name);
+ const shared=request.method==='GET'&&['/api/scene','/api/events','/api/live-config'].includes(url.pathname);
+ // Optional local UI verification against the already-public simulator; never used in production.
+ if(env.NODE_ENV!=='production'&&env.SIGNAL_READ_FALLBACK_URL&&shared){const source=new URL(env.SIGNAL_READ_FALLBACK_URL);if(source.origin!=='https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site')return json({message:'プレビュー接続先を確認してください。'},503);return fetcher(new URL(url.pathname,source),{signal:AbortSignal.timeout(12000),cache:'no-store'})}
+ if(!configured(env))return json({message:'管理者がサーバーの接続設定を確認する必要があります。',code:'SERVER_NOT_CONFIGURED'},503);
+ if(request.method==='POST'&&request.headers.get('origin')!==env.SITE_ORIGIN)return json({message:'同じサイトから操作してください。',code:'ORIGIN_DENIED'},403);
+ try{
+  if(url.pathname==='/api/auth/request'&&request.method==='POST'){
+   const body=await input(request);if(email(body.email)!==email(env.OWNER_EMAIL))return json({message:'所有者のメールアドレスを使用してください。'},403);
+   await auth(env,'otp','POST',{email:email(body.email),create_user:true},null,fetcher);return json({ok:true});
+  }
+  if(url.pathname==='/api/auth/verify'&&request.method==='POST'){
+   const body=await input(request);if(email(body.email)!==email(env.OWNER_EMAIL)||!/^\d{6}$/.test(body.token??''))return json({message:'メールアドレスと6桁のコードを確認してください。'},400);
+   const tokens=await auth(env,'verify','POST',{email:email(body.email),token:body.token,type:'email'},null,fetcher);
+   const user=await auth(env,'user','GET',null,tokens.access_token,fetcher);if(!owner(user,env))return json({message:'所有者の認証を確認できませんでした。'},403);
+   const session={id:crypto.randomUUID(),access:tokens.access_token,refresh:tokens.refresh_token,expires:Date.now()+tokens.expires_in*1000,until:Date.now()+28800000};
+   const response=json({ok:true});response.headers.append('set-cookie',cookie(await seal(session,env)));return response;
+  }
+  if(shared)return siteHandler(request,env,null);
+  let session=await unseal(request,env),user=null,updated=false;
+  if(session){try{
+   if(session.expires<Date.now()+60000){const tokens=await auth(env,'token?grant_type=refresh_token','POST',{refresh_token:session.refresh},null,fetcher);session={...session,access:tokens.access_token,refresh:tokens.refresh_token,expires:Date.now()+tokens.expires_in*1000};updated=true}
+   const verified=await auth(env,'user','GET',null,session.access,fetcher);if(owner(verified,env))user={userId:'vercel:'+verified.id+':'+session.id,email:verified.email};
+  }catch{session=null}}
+  if(url.pathname==='/api/admin/logout'&&request.method==='POST'){
+   if(session)await auth(env,'logout?scope=local','POST',null,session.access,fetcher).catch(()=>{});
+   const response=json({ok:true});response.headers.append('set-cookie',cookie('',0));response.headers.append('set-cookie','signal_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');return response;
+  }
+  if(!user)return json({message:'所有者のメール認証が必要です。',code:'SIGN_IN_REQUIRED'},401);
+  const response=await siteHandler(request,env,user);if(updated)response.headers.append('set-cookie',cookie(await seal(session,env)));return response;
+ }catch(error){return json({message:error.message||'通信を確認してください。',code:'AUTH_FAILED'},error.status||502)}
+}

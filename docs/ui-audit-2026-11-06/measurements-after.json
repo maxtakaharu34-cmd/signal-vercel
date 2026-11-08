@@ -1,0 +1,74 @@
+[
+  {
+    "axisFits": true,
+    "chartBottom": 569.8984375,
+    "chartHeight": 274,
+    "controlFont": "13px",
+    "controlHeight": 44,
+    "dockTop": 583,
+    "height": 640,
+    "landscapeTicker": "none",
+    "scrollWidth": 320,
+    "width": 320
+  },
+  {
+    "axisFits": true,
+    "chartBottom": 715.8984375,
+    "chartHeight": 420,
+    "controlFont": "14px",
+    "controlHeight": 44,
+    "dockTop": 787,
+    "height": 844,
+    "landscapeTicker": "none",
+    "scrollWidth": 390,
+    "width": 390
+  },
+  {
+    "axisFits": true,
+    "chartBottom": 638.9375,
+    "chartHeight": 360,
+    "controlFont": "14px",
+    "controlHeight": 44,
+    "dockTop": null,
+    "height": 1024,
+    "landscapeTicker": "none",
+    "scrollWidth": 768,
+    "width": 768
+  },
+  {
+    "axisFits": true,
+    "chartBottom": 792.140625,
+    "chartHeight": 504,
+    "controlFont": "14px",
+    "controlHeight": 44,
+    "dockTop": null,
+    "height": 900,
+    "landscapeTicker": "none",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "axisFits": true,
+    "chartBottom": 364.1484375,
+    "chartHeight": 220,
+    "controlFont": "14px",
+    "controlHeight": 44,
+    "dockTop": null,
+    "height": 390,
+    "landscapeTicker": "flex",
+    "scrollWidth": 844,
+    "width": 844
+  },
+  {
+    "axisFits": true,
+    "chartBottom": 260.5,
+    "chartHeight": 120,
+    "controlFont": "12px",
+    "controlHeight": 44,
+    "dockTop": 263,
+    "height": 320,
+    "landscapeTicker": "flex",
+    "scrollWidth": 568,
+    "width": 568
+  }
+]

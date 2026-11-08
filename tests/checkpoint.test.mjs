@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {series,generator,candle} from '../web/lib/simulation.mjs';import {validateCheckpoint} from '../web/checkpoint.mjs';
+const snapshot=()=>{const config={direction:1,volatility:3,speed:2},{rows,rng}=series(7,config);return {schemaVersion:1,seed:7,total:72,config,rows,rngState:rng.state()}};
+test('a saved RNG checkpoint resumes the identical next candle',()=>{const config={direction:1,volatility:3,speed:2},{rows,rng}=series(7,config);const restored=generator(rng.state());assert.deepEqual(candle(rows.at(-1).close,config,rng,72),candle(rows.at(-1).close,config,restored,72))});
+test('valid workspace checkpoints can be restored',()=>assert.equal(validateCheckpoint(snapshot()),true));
+test('invalid configuration and malformed candles are rejected',()=>{for(const mutate of [v=>v.config.speed=99,v=>v.config.volatility=null,v=>v.rngState=-1,v=>v.rows=[],v=>v.rows[0]={open:100,close:100,low:101,high:100,time:0}]){const v=structuredClone(snapshot());mutate(v);assert.equal(validateCheckpoint(v),false)}});
