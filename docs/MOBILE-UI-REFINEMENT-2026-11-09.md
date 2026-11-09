@@ -25,3 +25,11 @@
 - Local owner-only visual fixture used an isolated in-memory database and `review@example.invalid`, not production owner credentials. Admin navigation, preview, tuning disclosure and stop placement were inspected there. At 375 × 667 the stop button spans y=478–522.
 - Screenshots: sibling evidence folder `vercel-migration-evidence/mobile-refinement-2026-11-09/`. Local screenshots must not be represented as production authentication evidence.
 - Limitations: no physical iPhone Safari, screen-reader session or device keyboard test this iteration; no current authenticated benchmark trading screen was accessed.
+
+## Published verification
+
+- Implementation commit: `5304e29`.
+- Vercel deployment: `dpl_C2Ku3epZtQLFfMmJpSqBZp93RZpQ`, READY, production alias https://fx-signal-terminal.vercel.app/ .
+- Anonymous requests to `/`, `/admin`, `/mobile.css` and `/api/scene` all returned HTTP 200. Owner operations remain protected; HTTP 200 on `/admin` serves the login shell.
+- Published viewer verified at 390 × 844: 390 px document width, 354 px plot, 35 px quote; native settings dialog bottom aligned at y=844; previous-candle inspection produced a crosshair and JST selection. Live connection showed リアルタイム接続. Shared revision remained #0024.
+- Published screenshots: `published-mobile-390.png` and `published-settings-390.png`; structured evidence: `verification.json` in the sibling evidence folder noted above.
