@@ -1,10 +1,10 @@
 // These are local display preferences, never scenario data or account state.
 const KEY='fx-demo-display-v1';
 export function readDisplayPreferences(window){
- try{const value=JSON.parse(window.localStorage.getItem(KEY)||'{}');return {colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous'}}catch{return {colors:'jp',maxBars:null,changeBase:'previous'}}
+ try{const value=JSON.parse(window.localStorage.getItem(KEY)||'{}');return {colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none'}}catch{return {colors:'jp',maxBars:null,changeBase:'previous',ma:true,bands:false,study:'none'}}
 }
 export function saveDisplayPreferences(window,value){
- try{window.localStorage.setItem(KEY,JSON.stringify({colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous'}))}catch{}
+ try{window.localStorage.setItem(KEY,JSON.stringify({colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none'}))}catch{}
 }
 export function quoteChange(rows,{base='previous',count=72}={}){
  const last=rows.at(-1);if(!last)return 0;

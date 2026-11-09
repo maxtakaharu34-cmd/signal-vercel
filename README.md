@@ -40,3 +40,8 @@ Anonymous production HTML/assets/shared API reads return 200. Browser chart pric
 ## Phone interface
 
 The November9 phone layout groups quote, direction and all six levels above the chart, makes signal explanations expandable, offers compact/full price history, and switches the admin operation/preview panes. Desktop layout remains two-column. See docs/MOBILE-UI-2026-11-09.md for browser measurements and actual production proof.
+
+
+### UI refinement (2026-11-09)
+
+The chart's **指標** control opens display settings for SMA 20, Bollinger bands and an optional RSI/MACD pane. Settings stay on the current device and never publish scenario changes. The owner panel labels immediate commands versus manual publication, shows unpublished preview status and a before/after change list, and retains drafts when offline. Research and verification: [UI review](docs/UI-RESEARCH-AND-REFINEMENT-2026-11-09.md).

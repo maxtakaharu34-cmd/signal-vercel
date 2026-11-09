@@ -1,3 +1,11 @@
+# Current reference status — 2026-11-09
+
+The supplied Claude prototype is now accessible in the real browser and has been inspected at desktop and phone widths. This supersedes the earlier access limitation recorded below. Current UI research, measured comparisons and deliberate adaptations are in [UI-RESEARCH-AND-REFINEMENT-2026-11-09.md](docs/UI-RESEARCH-AND-REFINEMENT-2026-11-09.md). The active application uses white shared viewer/admin surfaces, a native settings sheet and optional RSI/MACD panes; historical dark admin descriptions below do not describe the current UI.
+
+The original GitHub reference remains read-only and unchanged. Its live deployment currently returns a server error; no current source parity is claimed.
+
+## Historical reference notes
+
 # Read-only UI reference
 
 Source: `maxtakaharu34-cmd/fx-ai-tool`, main `73c914cda98d234f5c93c87dd56ac2282e7f2e8f`.
