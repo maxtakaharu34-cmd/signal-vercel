@@ -29,10 +29,14 @@ Email resend has a client cooldown, verification stays bound to the requested em
 
 ## Deployment status
 
-Published 2026-11-09 with the authenticated Vercel CLI, after the native connector continued returning 403 even following team consent. Separate project `fx-signal-terminal` (`prj_OzDhNsMaqBtmlVPJzaqKKeRAlJq8`), current production deployment `dpl_3H8yd5PXXVq6nz4oSfYy1QAP77Dd`, Node 24, Tokyo functions. Six server variables are production Secrets; `SITE_ORIGIN` is the canonical production origin. Source is uploaded from this independent local repository; the reference GitHub was not changed or linked.
+Published 2026-11-09 with the authenticated Vercel CLI, after the native connector continued returning 403 even following team consent. Separate project `fx-signal-terminal` (`prj_OzDhNsMaqBtmlVPJzaqKKeRAlJq8`), current production deployment `dpl_BXrLhAQ29MCwrCj8LMadbJGevgsJ`, Node 24, Tokyo functions. Six server variables are production Secrets; `SITE_ORIGIN` is the canonical production origin. Source is uploaded from this independent local repository; the reference GitHub was not changed or linked.
 
 Anonymous production HTML/assets/shared API reads return 200. Browser chart prices and signals update automatically. PIN-only and forged-identity administrator requests return 401; foreign-origin writes return 403. The existing Sites viewer still returns 200 and uses the same database. Runtime error scan since publication returned no records. The production authentication mail, confirmed owner sign-in, and PIN login are verified from the real provider and production request logs. An authenticated live scene edit has not been performed just for testing. Provider return URLs are configured; custom templates are not required. Existing management entry remains https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site/admin/ (owner Site sign-in plus 111).
 
 ## Checks
 
 `npm test` and `npm run build` passed before the refinement publication (97 unique tests validated). Production HTTP checks and the actual deployed UI screenshot are in the sibling `vercel-migration-evidence` folder. Mocked authentication tests are not evidence of a real Supabase owner login.
+
+## Phone interface
+
+The November9 phone layout groups quote, direction and all six levels above the chart, makes signal explanations expandable, offers compact/full price history, and switches the admin operation/preview panes. Desktop layout remains two-column. See docs/MOBILE-UI-2026-11-09.md for browser measurements and actual production proof.
