@@ -29,3 +29,9 @@ Added an in-page chart expansion control, Escape dismissal, and responsive sizin
 The Supabase dashboard was successfully authenticated. Its free plan prohibits custom email-template editing without custom SMTP; no upgrade or SMTP purchase was made. The default authentication now uses standard email links plus server-only PKCE, encrypted HttpOnly cookies and a subsequent owner-bound PIN session. Site URL and the exact production callback were saved and visibly verified. Optional code mode and its template remain documented.
 
 96 full-suite tests passed; the additional email-link UI test also passed in its targeted two-test file (97 unique tests total). The final Next production build passed. Actual production email delivery, owner sign-in and a native Vercel administrator edit still require end-to-end verification.
+
+## Refinement release
+
+Production deployment `dpl_3H8yd5PXXVq6nz4oSfYy1QAP77Dd` is READY at the same canonical URL, from source commit `0624dd4fb62e3aa2b97d70fc1fa3577213857c55`. Public HTML/assets/data are live; the expanded chart was inspected on the actual production page. An anonymous tuning request is rejected (401); a callback without the browser verifier redirects to the fixed explanatory admin URL (303, no-referrer). The deployed tuning payload also passes the real PostgreSQL checkpoint/signal validators in a read-only check. Shared scenario version remains 24. The runtime error scan returned zero records.
+
+The actual admin form's owner email request succeeded and displayed link-completion guidance. One email was requested. The owner must open the email link in the same browser to complete PKCE, then enter 111. Actual owner login and a live administrator edit are still pending; do not substitute mocked-provider test results for these observations.
