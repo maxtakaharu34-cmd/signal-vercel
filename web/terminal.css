@@ -87,3 +87,11 @@ body[data-page=admin] .container{padding-top:22px}.page-heading h1{font-size:22p
 @media(min-width:768px) and (max-width:1050px){.quote-wrap .quote{display:block;font-size:28px}.quote-wrap .change-base{display:inline}.chart-heading h2{font-size:15px}.chart-heading .subtle{display:none}.chart-heading .caption{font-size:11px}}
 
 .admin-gate input{letter-spacing:normal;text-align:left}.admin-gate input[inputmode=numeric]{text-align:center;letter-spacing:.35em}
+
+.automation-tuning{display:grid;gap:10px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:16px 0;margin:5px 0 8px}.automation-tuning input[type=range]{width:100%;accent-color:var(--blue)}.automation-tuning select{width:100%;min-height:44px}.automation-tuning .range-endpoints{margin-top:-8px}.automation-tuning .field-note{margin:0;font-size:11px}
+.owner-link-panel{border-top:1px solid var(--border);padding-top:14px;margin-top:16px}.owner-link-panel p{font-size:12px;line-height:1.8}.owner-link-panel .button{margin-top:12px}#changeOwnerEmail{margin:12px 0;min-height:44px}
+#chartFocus{white-space:nowrap}.chart-bottom #chartFocus{margin-left:auto}
+body[data-chart-focus=true] .signal-column,body[data-chart-focus=true] .overview-strip,body[data-chart-focus=true] #dataWorkspace,body[data-chart-focus=true] .footer{display:none}
+body[data-chart-focus=true]{overflow:hidden}body[data-chart-focus=true] #chartArea{position:fixed;inset:60px 12px 12px;z-index:120;display:flex;flex-direction:column;background:#fff}body[data-chart-focus=true] .chart-heading,body[data-chart-focus=true] .chart-tools,body[data-chart-focus=true] .chart-bottom{flex-shrink:0}body[data-chart-focus=true] .chart-body{flex:1;min-height:0;display:flex;flex-direction:column}body[data-chart-focus=true] .chart-body>svg{flex:1;min-height:0;height:0;width:100%}body[data-chart-focus=true] .ohlc{flex-shrink:0}
+@media(max-width:767px){body[data-chart-focus=true] #chartArea{inset:118px 6px calc(68px + env(safe-area-inset-bottom))}.chart-bottom #chartFocus{font-size:11px;min-height:44px;margin-left:0}.chart-bottom #visibleRange{display:none}}
+@media(orientation:landscape) and (max-height:500px){body[data-chart-focus=true] #chartArea{inset:48px 6px 6px}.chart-bottom #chartFocus{min-height:30px}}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleVercelApi} from '../server/vercel-api.mjs';
-const env={NODE_ENV:'production',OWNER_EMAIL:'owner@example.test',SITE_ORIGIN:'https://terminal.example.test',ADMIN_ENTRY_PIN:'111',DEMO_BRIDGE_SECRET:'a'.repeat(64),SUPABASE_URL:'https://test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test'};
+const env={NODE_ENV:'production',OWNER_AUTH_METHOD:'code',OWNER_EMAIL:'owner@example.test',SITE_ORIGIN:'https://terminal.example.test',ADMIN_ENTRY_PIN:'111',DEMO_BRIDGE_SECRET:'a'.repeat(64),SUPABASE_URL:'https://test.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_test'};
 const request=(path,body,cookie='',extra={})=>new Request(env.SITE_ORIGIN+path,{method:body?'POST':'GET',headers:{origin:env.SITE_ORIGIN,cookie,'content-type':'application/json',...extra},...(body?{body:JSON.stringify(body)}:{})});
 const verified={id:'owner-id',email:env.OWNER_EMAIL,email_confirmed_at:new Date().toISOString(),is_anonymous:false};
 const tokens={access_token:'test-access',refresh_token:'test-refresh',expires_in:3600};

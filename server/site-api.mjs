@@ -1,4 +1,4 @@
-import {projectScene,startAutomation,stopAutomation} from '../web/timeline.mjs';
+import {projectScene,startAutomation,stopAutomation,tuneAutomation,validAutomation,validAutomationSettings} from '../web/timeline.mjs';
 import {validateScene,directionLabel} from '../web/engine.mjs';
 import {LIVE_TOPIC,LIVE_EVENT,notifySceneSaved} from './live-notify.mjs';
 const SESSION='signal_admin';const encoder=new TextEncoder();
@@ -39,12 +39,14 @@ export async function handleSiteApi(request,env,user=null){
   if(path==='/api/admin/automation'&&request.method==='POST'){
    if(!owner||!await validCookie(request,identity,env.DEMO_BRIDGE_SECRET||''))return json({message:'管理画面にコードでログインしてください。',code:'FORBIDDEN'},403);
    const input=await body(request);
-   if(!Number.isSafeInteger(input.expected_version)||input.expected_version<1||!['start','stop'].includes(input.action)||(input.action==='start'&&![-1,0,1].includes(input.direction)))return json({message:'操作内容を確認してください。',code:'INVALID_AUTOMATION'},400);
+   if(!Number.isSafeInteger(input.expected_version)||input.expected_version<1||!['start','stop','tune'].includes(input.action)||(input.action==='start'&&![-1,0,1].includes(input.direction))||(input.action==='tune'&&!validAutomationSettings(input.settings)))return json({message:'操作内容を確認してください。',code:'INVALID_AUTOMATION'},400);
    const source=await bridge(env,identity,'read');
    if(source.scene.version!==input.expected_version)return json({message:'他の画面で更新されています。再同期してください。',code:'PT409'},409);
    if(!validateScene(source.scene))return json({message:'保存データを確認してください。'},502);
-   const now=Date.now(),next=input.action==='stop'?stopAutomation(source.scene,now):startAutomation(source.scene,input.direction,now);
-   const payload={expected_version:input.expected_version,new_checkpoint:next.checkpoint,new_signal:next.signal,new_announcement:next.announcement,event_label:input.action==='stop'?'自動シミュレーションを停止':'自動シミュレーションを'+directionLabel(input.direction)+'へ変更'};
+   if(input.action==='tune'&&!validAutomation(source.scene.checkpoint.automation))return json({message:'先に自動シミュレーションを開始してください。',code:'AUTOMATION_STOPPED'},409);
+   const now=Date.now(),next=input.action==='stop'?stopAutomation(source.scene,now):input.action==='tune'?tuneAutomation(source.scene,input.settings,now):startAutomation(source.scene,input.direction,now);
+   const label=input.action==='stop'?'自動シミュレーションを停止':input.action==='tune'?'自動更新の速さ・値動きの大きさを変更':'自動シミュレーションを'+directionLabel(input.direction)+'へ変更';
+   const payload={expected_version:input.expected_version,new_checkpoint:next.checkpoint,new_signal:next.signal,new_announcement:next.announcement,event_label:label};
    const saved=await bridge(env,identity,'publish',payload),notified=await notifySceneSaved(env);
    return json({...projectScene(saved.scene,now),delivery:{notified}});
   }

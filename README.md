@@ -19,15 +19,19 @@ Development: `npm run dev` (127.0.0.1:3110). Configure the six server variables 
 
 ## Owner authentication
 
-Supabase email OTP verifies only `OWNER_EMAIL`; tokens stay in an encrypted Secure HttpOnly SameSite=Strict cookie. Then the existing three-digit entrance code grants a signed session bound to that verified identity. Caller-supplied Sites identity/service headers are discarded. The entrance code alone cannot grant access.
+The default uses Supabase's standard email link with server-side PKCE. The allowlisted owner receives an email; the callback exchanges its one-time authorization code using a verifier kept in an encrypted Secure HttpOnly SameSite=Lax cookie. The server confirms the owner identity, then stores provider tokens only in an encrypted Secure HttpOnly SameSite=Strict session. Entry code 111 is still required for management. Caller-supplied Sites identity/service headers are discarded.
 
-Supabase setup required before claiming admin login works: in Authentication → Email Templates, include `{{ .Token }}` in both **Confirm signup** (first owner login) and **Magic Link** (subsequent logins). Use a subject/body clearly identifying FX DEMO. Verify email delivery to the configured owner. These provider settings and real owner email delivery have NOT been verified in this migration yet. The dashboard currently requires sign-in. No email has been sent by this implementation session.
+Supabase Site URL is `https://fx-signal-terminal.vercel.app`. The exact callback `https://fx-signal-terminal.vercel.app/api/auth/callback` is registered alongside the existing Sites redirect. No wildcard or paid plan is needed. Open the email link in the browser that requested it. Missing, expired or altered verifier cookies and different/unconfirmed/anonymous identities fail closed. The callback redirects to a clean admin URL, never sends access/refresh tokens to JavaScript, and never grants administrator access before PIN entry.
+
+Optional `OWNER_AUTH_METHOD=code` retains the six-digit OTP flow, for a provider configuration that can customize email templates. `docs/auth-email-template.html` is an optional template for that mode; it is not applied to the current free provider. Current dashboard requires custom SMTP or Pro to edit its default templates; neither was purchased/configured.
+
+Email resend has a client cooldown, verification stays bound to the requested email, and the link-completion button trusts only the server session. Production email delivery and owner login must be verified separately from mocked provider tests.
 
 ## Deployment status
 
 Published 2026-11-09 with the authenticated Vercel CLI, after the native connector continued returning 403 even following team consent. Separate project `fx-signal-terminal` (`prj_OzDhNsMaqBtmlVPJzaqKKeRAlJq8`), production deployment `dpl_DurF48cwK5VCV97pw2pvSbzXeiiB`, Node 24, Tokyo functions. Six server variables are production Secrets; `SITE_ORIGIN` is the canonical production origin. Source is uploaded from this independent local repository; the reference GitHub was not changed or linked.
 
-Anonymous production HTML/assets/shared API reads return 200. Browser chart prices and signals update automatically. PIN-only and forged-identity administrator requests return 401; foreign-origin writes return 403. The existing Sites viewer still returns 200 and uses the same database. Runtime error scan since publication returned no records. Real Vercel owner email delivery/login and an authenticated Vercel scenario edit remain unverified pending Supabase email-template configuration. Existing management entry remains https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site/admin/ (owner Site sign-in plus 111).
+Anonymous production HTML/assets/shared API reads return 200. Browser chart prices and signals update automatically. PIN-only and forged-identity administrator requests return 401; foreign-origin writes return 403. The existing Sites viewer still returns 200 and uses the same database. Runtime error scan since publication returned no records. Real Vercel owner email delivery/login and an authenticated Vercel scenario edit remain unverified until the owner follows the standard PKCE email link. Provider return URLs are configured; custom templates are no longer required. Existing management entry remains https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site/admin/ (owner Site sign-in plus 111).
 
 ## Checks
 

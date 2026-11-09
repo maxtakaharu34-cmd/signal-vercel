@@ -84,6 +84,15 @@ export function startAutomation(record,direction,now=Date.now()){
  checkpoint.automation={schemaVersion:1,priceModel:2,modelSeed:old?.modelSeed??((checkpoint.seed^checkpoint.rngState)>>>0),anchorMs:now,originTime:last.time,originTotal:checkpoint.total,startPrice:last.close,initialMomentum,initialSignalScore,baseRngState:checkpoint.rngState};
  return {...current,checkpoint,signal:automaticSignal(checkpoint,0),clock:{step:0,generatedAt:new Date(now).toISOString()}};
 }
+export function validAutomationSettings(settings){return !!settings&&[1,2,5,10].includes(settings.speed)&&Number.isInteger(settings.volatility)&&settings.volatility>=1&&settings.volatility<=10&&Object.keys(settings).every(key=>['speed','volatility'].includes(key))}
+// Re-anchor at the shared current close. Existing candles and signal momentum
+// survive a speed/volatility change; only subsequent synthetic steps are tuned.
+export function tuneAutomation(record,settings,now=Date.now()){
+ if(!validAutomation(record?.checkpoint?.automation)||!validAutomationSettings(settings))throw Error('自動更新の設定を確認してください。');
+ const next=startAutomation(record,record.checkpoint.config.direction,now);
+ Object.assign(next.checkpoint.config,settings);
+ return next;
+}
 // Scheduled handover preserves all candles already seen before activation.
 export function schedulePriceUpgrade(record,at,now=Date.now()){
  const a=record.checkpoint?.automation;

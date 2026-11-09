@@ -1,15 +1,20 @@
 import {handleSiteApi} from './site-api.mjs';
 
 const COOKIE='__Host-fx-owner';
+const PKCE_COOKIE='__Host-fx-owner-pkce';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'cache-control':'private, no-store'}});
 const encode=bytes=>Buffer.from(bytes).toString('base64url');
 const decode=value=>Buffer.from(value,'base64url');
 const email=value=>String(value??'').trim().toLowerCase();
 const cookie=(value,age=28800)=>`${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+const pkceCookie=(value,age=1200)=>`${PKCE_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;
 const configured=env=>env.SUPABASE_URL?.startsWith('https://')&&env.SUPABASE_PUBLISHABLE_KEY&&env.DEMO_BRIDGE_SECRET?.length>=64&&env.OWNER_EMAIL&&env.SITE_ORIGIN;
 async function sessionKey(env){return crypto.subtle.importKey('raw',await crypto.subtle.digest('SHA-256',new TextEncoder().encode('vercel-owner-cookie-v1:'+env.DEMO_BRIDGE_SECRET)),{name:'AES-GCM'},false,['encrypt','decrypt'])}
-async function seal(value,env){const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(COOKIE)},await sessionKey(env),new TextEncoder().encode(JSON.stringify(value)));return encode(iv)+'.'+encode(cipher)}
-async function unseal(request,env){try{const value=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);if(!value||value.length>6000)return null;const [iv,cipher,extra]=value.split('.');if(extra||!iv||!cipher)return null;const clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(iv),additionalData:new TextEncoder().encode(COOKIE)},await sessionKey(env),decode(cipher));const data=JSON.parse(new TextDecoder().decode(clear));return data.until>Date.now()&&data.id&&data.access&&data.refresh?data:null}catch{return null}}
+async function seal(value,env,purpose=COOKIE){const iv=crypto.getRandomValues(new Uint8Array(12)),cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(purpose)},await sessionKey(env),new TextEncoder().encode(JSON.stringify(value)));return encode(iv)+'.'+encode(cipher)}
+async function readSealed(request,env,name=COOKIE){try{const value=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);if(!value||value.length>6000)return null;const [iv,cipher,extra]=value.split('.');if(extra||!iv||!cipher)return null;const clear=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(iv),additionalData:new TextEncoder().encode(name)},await sessionKey(env),decode(cipher));const data=JSON.parse(new TextDecoder().decode(clear));return data.until>Date.now()?data:null}catch{return null}}
+async function unseal(request,env){const data=await readSealed(request,env);return data?.id&&data.access&&data.refresh?data:null}
+function ownerSession(tokens){if(typeof tokens.access_token!=='string'||typeof tokens.refresh_token!=='string'||!Number.isFinite(tokens.expires_in)||tokens.expires_in<=0)throw Error('認証情報を確認できませんでした。');return {id:crypto.randomUUID(),access:tokens.access_token,refresh:tokens.refresh_token,expires:Date.now()+tokens.expires_in*1000,until:Date.now()+28800000}}
+function authRedirect(env,result){return new Response(null,{status:303,headers:{location:env.SITE_ORIGIN+'/admin'+(result?'?auth='+result:''),'cache-control':'private, no-store','referrer-policy':'no-referrer'}})}
 async function auth(env,path,method='GET',body,token,fetcher=fetch){
  const response=await fetcher(env.SUPABASE_URL+'/auth/v1/'+path,{method,headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(12000)});
  const data=response.status===204?{}:await response.json();if(!response.ok)throw Object.assign(Error(response.status===429?'少し時間をおいてから再度お試しください。':'認証できませんでした。メールアドレスと認証コードを確認してください。'),{status:response.status===429?429:401});return data;
@@ -29,13 +34,27 @@ export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=ha
  try{
   if(url.pathname==='/api/auth/request'&&request.method==='POST'){
    const body=await input(request);if(email(body.email)!==email(env.OWNER_EMAIL))return json({message:'所有者のメールアドレスを使用してください。'},403);
-   await auth(env,'otp','POST',{email:email(body.email),create_user:true},null,fetcher);return json({ok:true});
+   if(env.OWNER_AUTH_METHOD==='code'){await auth(env,'otp','POST',{email:email(body.email),create_user:true},null,fetcher);return json({ok:true,method:'code'})}
+   const verifier=encode(crypto.getRandomValues(new Uint8Array(32))),challenge=encode(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+   const redirect=env.SITE_ORIGIN+'/api/auth/callback';
+   await auth(env,'otp?redirect_to='+encodeURIComponent(redirect),'POST',{email:email(body.email),create_user:true,code_challenge:challenge,code_challenge_method:'s256'},null,fetcher);
+   const response=json({ok:true,method:'link'});response.headers.append('set-cookie',pkceCookie(await seal({verifier,until:Date.now()+1200000},env,PKCE_COOKIE)));return response;
+  }
+  if(url.pathname==='/api/auth/callback'&&request.method==='GET'){
+   if(url.origin!==env.SITE_ORIGIN)return json({message:'正しい管理画面から認証してください。'},403);
+   const pending=await readSealed(request,env,PKCE_COOKIE),code=url.searchParams.get('code');
+   if(!pending?.verifier||!code||code.length>2048)return authRedirect(env,'wrong_browser');
+   try{
+    const tokens=await auth(env,'token?grant_type=pkce','POST',{auth_code:code,code_verifier:pending.verifier},null,fetcher);
+    const verified=await auth(env,'user','GET',null,tokens.access_token,fetcher);if(!owner(verified,env))throw Error('Owner required');
+    const response=authRedirect(env);response.headers.append('set-cookie',cookie(await seal(ownerSession(tokens),env)));response.headers.append('set-cookie',pkceCookie('',0));return response;
+   }catch{const response=authRedirect(env,'link_failed');response.headers.append('set-cookie',pkceCookie('',0));return response}
   }
   if(url.pathname==='/api/auth/verify'&&request.method==='POST'){
    const body=await input(request);if(email(body.email)!==email(env.OWNER_EMAIL)||!/^\d{6}$/.test(body.token??''))return json({message:'メールアドレスと6桁のコードを確認してください。'},400);
    const tokens=await auth(env,'verify','POST',{email:email(body.email),token:body.token,type:'email'},null,fetcher);
    const user=await auth(env,'user','GET',null,tokens.access_token,fetcher);if(!owner(user,env))return json({message:'所有者の認証を確認できませんでした。'},403);
-   const session={id:crypto.randomUUID(),access:tokens.access_token,refresh:tokens.refresh_token,expires:Date.now()+tokens.expires_in*1000,until:Date.now()+28800000};
+   const session=ownerSession(tokens);
    const response=json({ok:true});response.headers.append('set-cookie',cookie(await seal(session,env)));return response;
   }
   if(shared)return siteHandler(request,env,null);
@@ -46,7 +65,7 @@ export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=ha
   }catch{session=null}}
   if(url.pathname==='/api/admin/logout'&&request.method==='POST'){
    if(session)await auth(env,'logout?scope=local','POST',null,session.access,fetcher).catch(()=>{});
-   const response=json({ok:true});response.headers.append('set-cookie',cookie('',0));response.headers.append('set-cookie','signal_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');return response;
+   const response=json({ok:true});response.headers.append('set-cookie',cookie('',0));response.headers.append('set-cookie',pkceCookie('',0));response.headers.append('set-cookie','signal_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');return response;
   }
   if(!user)return json({message:'所有者のメール認証が必要です。',code:'SIGN_IN_REQUIRED'},401);
   const response=await siteHandler(request,env,user);if(updated)response.headers.append('set-cookie',cookie(await seal(session,env)));return response;
