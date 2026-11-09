@@ -1,5 +1,13 @@
 # UI research and refinement — 2026-11-09
 
+## 今回の変更と公開先
+
+- [表示画面](https://fx-signal-terminal.vercel.app/) / [管理画面](https://fx-signal-terminal.vercel.app/admin)
+- チャートの「指標」から、RSI・MACD・移動平均線・バンドを設定できます。設定は端末内に保存されます。
+- 管理画面は、即時反映と公開前の編集を区別し、公開する変更を比較表示します。
+- 指定の試作画面、DMMの公開チャート、OANDAとTradingViewの公式資料を調べて反映しました。原本のGitHubは変更していません。
+- 106件のテスト、スマホ・横向き・PCの描画確認、公開先での指標切替・価格連動を確認しました。実機のiPhone/Safariを確認したという意味ではありません。
+
 ## Scope and primary evidence
 
 This is the UI phase of the existing shared simulation application. The requested direction is a restrained white financial interface, a clear separation between viewer and owner operations, useful charts and signals, responsive interaction, and real behavior rather than a static mockup. Backend product expansion is deferred. Real funds, customer profits, identity documents, fabricated licenses and the original GitHub repository are outside this UI change.
@@ -38,3 +46,25 @@ Read the entire supplied `fx-simulator-ui-spec.md`, including the prototype and 
 - Existing owner authentication, shared seed/scenario and all server handlers were preserved. Original reference repository was not modified. The mock prototype's random values or state-switch controls were not imported into the production data path.
 
 Evidence: sibling `vercel-migration-evidence/ui-studies-2026-11-09/` contains prototype screenshot/metrics, local RSI/admin screenshots and structured checks. Local owner screenshots are not production-authentication proof. Published verification is appended after deployment.
+
+## Published verification and completion audit
+
+- Code commit `699a389`, deployment `dpl_EyAwuLzFJCvzGz9qVVW1ThPVcyEM`, READY, production https://fx-signal-terminal.vercel.app/ .
+- Anonymous GET `/`, `/admin`, `/api/scene`, `/mobile.css`: HTTP 200. The admin response serves its protected login shell plus the new change-summary markup; it does not grant anonymous administrator access.
+- Published phone UI at 390×844: 390 px document width, 35 px quote, 14 px OHLC, real RSI/MACD pane and exact shared selected-candle cursor. MACD aria summary includes MACD, signal-line and histogram values. No NaN/Infinity geometry observed.
+- Final native browser showed リアルタイム接続, revision #0024. Shared production revision stayed 24 throughout; localhost test publication at revision 26 is independent. Display preference was restored to none and viewport reset to normal 881×1051. Public tab retained. Local test server stopped after verification.
+- Proof image `published-rsi-390.jpg` is actual JPEG 390×844. Original screenshot bytes also remain at the initial `.png` path; extension was corrected in the delivery copy without altering the image.
+
+| UI requirement | Authoritative evidence | Audit result |
+|---|---|---|
+| Research supplied reference and professional finance UI | Rendered prototype iframe metrics/screenshot, live DMM DOM measurements, linked OANDA/TradingView primary documentation | Verified; no claim of copying an unavailable authenticated terminal |
+| White cohesive viewer/admin surfaces and understandable hierarchy | Current shared semantic CSS, real phone/admin render, owner selection colors and preview labels | Verified |
+| Current synthetic prices, six levels and distinct scenario/signal meaning | Current renderer and disclosure markup; existing six-level/direction tests; live common revision 24 | Verified; no actual-market or monetary representation added |
+| Useful chart interaction and locally saved preferences | Published RSI and MACD switching, cursor x alignment, preference restore; historical indicator tests | Verified |
+| Clear owner controls, preview, publication scope and feedback | Real isolated client/API/second-viewer flow, before/after draft list, distinct states and offline/failed-write tests | Verified without modifying production scenario |
+| Phone/tablet/desktop/landscape responsiveness and navigation | Structured 320/390/768/1440/1920 and 568/844 landscape measurements; real landscape tab switching | Verified; very small optional-study layouts scroll vertically |
+| Readability, touch targets and keyboard/modal behavior | 44 px control measurements, 11 px minimum visible viewer text scans across four panels, contrast samples, native dialog and existing keyboard/reduced-motion tests | Verified within inspected scope; no whole-site accessibility certification claimed |
+| Working application and delivery | 106 passing tests, successful production build/deployment, HTTP 200 assets and live public browser proof | Verified |
+| Preserve data/auth boundaries and reference repository | Change set confined to UI/helpers/tests/docs; server code unchanged; original repository not modified; production revision unchanged | Verified |
+
+The UI research/refinement phase is delivered. Deferred backend product expansion remains outside this phase. Physical-device testing, Web Vitals certification and exact pixel cloning are not represented as completed work.
