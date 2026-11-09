@@ -1,6 +1,6 @@
 # FX DEMO — Vercel edition
 
-Transparent common-scenario synthetic index monitor. No actual trading, customer money, balances, wallets or identity documents. The original Sites application and reference GitHub repository remain unchanged.
+Transparent common-scenario synthetic index monitor. No actual trading, customer money, balances, wallets or identity documents. The reference GitHub repository remains unchanged. The existing Sites application now also serves the white UI (release 23, Sites source commit 3c38e2ad09477a7244c13315363fd2b66cfd381a). Vercel publication is still pending reconnection.
 
 ## Run
 

@@ -1,6 +1,6 @@
 # Migration record — 2026-11-09
 
-Source copied from Sites commit 521505d88662df4fec897417bce0dba0a48e700d. No edits or pushes to the reference repository or existing Sites source.
+Source copied from Sites commit 521505d88662df4fec897417bce0dba0a48e700d. No edits or pushes to the reference GitHub repository. After Vercel remained unauthorized, the white presentation was published on the existing Sites host as release 23 (commit 3c38e2ad09477a7244c13315363fd2b66cfd381a), preserving Sites owner authentication and database adapters.
 
 ## UI changes
 White chart, lighter grid, compact horizontal controls, aligned price/ohlc fields, flatter signal and setting panels, denser data tabs and technical indicators. No broker logos, copied assets or fabricated credentials. Japanese system fonts; decorative English Dashboard wording removed. Demo and synthetic-price disclosures remain.
