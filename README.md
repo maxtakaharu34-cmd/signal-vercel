@@ -25,13 +25,13 @@ Supabase Site URL is `https://fx-signal-terminal.vercel.app`. The exact callback
 
 Optional `OWNER_AUTH_METHOD=code` retains the six-digit OTP flow, for a provider configuration that can customize email templates. `docs/auth-email-template.html` is an optional template for that mode; it is not applied to the current free provider. Current dashboard requires custom SMTP or Pro to edit its default templates; neither was purchased/configured.
 
-Email resend has a client cooldown, verification stays bound to the requested email, and the link-completion button trusts only the server session. Production email delivery and owner login must be verified separately from mocked provider tests.
+Email resend has a client cooldown, verification stays bound to the requested email, and the link-completion button trusts only the server session. The owner completed the actual email link in their phone browser. The real provider confirms the owner, and production request logs show successful PIN login (200) at 2026-11-09 20:28:30 JST. No session credentials were read or copied.
 
 ## Deployment status
 
 Published 2026-11-09 with the authenticated Vercel CLI, after the native connector continued returning 403 even following team consent. Separate project `fx-signal-terminal` (`prj_OzDhNsMaqBtmlVPJzaqKKeRAlJq8`), current production deployment `dpl_3H8yd5PXXVq6nz4oSfYy1QAP77Dd`, Node 24, Tokyo functions. Six server variables are production Secrets; `SITE_ORIGIN` is the canonical production origin. Source is uploaded from this independent local repository; the reference GitHub was not changed or linked.
 
-Anonymous production HTML/assets/shared API reads return 200. Browser chart prices and signals update automatically. PIN-only and forged-identity administrator requests return 401; foreign-origin writes return 403. The existing Sites viewer still returns 200 and uses the same database. Runtime error scan since publication returned no records. The production authentication-mail request was accepted. Actual receipt, owner sign-in and an authenticated Vercel scenario edit remain unverified until the owner follows the standard PKCE email link. Provider return URLs are configured; custom templates are no longer required. Existing management entry remains https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site/admin/ (owner Site sign-in plus 111).
+Anonymous production HTML/assets/shared API reads return 200. Browser chart prices and signals update automatically. PIN-only and forged-identity administrator requests return 401; foreign-origin writes return 403. The existing Sites viewer still returns 200 and uses the same database. Runtime error scan since publication returned no records. The production authentication mail, confirmed owner sign-in, and PIN login are verified from the real provider and production request logs. An authenticated live scene edit has not been performed just for testing. Provider return URLs are configured; custom templates are not required. Existing management entry remains https://signal-homepage-1105.maxtakaharu3-4.chatgpt.site/admin/ (owner Site sign-in plus 111).
 
 ## Checks
 
