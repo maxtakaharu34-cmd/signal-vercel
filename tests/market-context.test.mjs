@@ -12,9 +12,9 @@ test('range expansion, zero ranges and insufficient context never fabricate a re
  const data=rows(0);for(let i=72;i<80;i++){data[i].high=108;data[i].low=92}assert.equal(marketContext(data).volatility,'変動拡大');
  const flat=rows(0).map(r=>({...r,high:r.close,low:r.close})),c=marketContext(flat);assert.equal(c.volatilityRatio,null);assert.equal(c.shape,'小さな実体');assert.ok(Number.isFinite(c.atrPercent));assert.ok(marketContext(data.slice(0,5)).horizons.every(h=>h.direction===null));assert.equal(marketContext([]),null);
 });
-test('signal component totals match the displayed direction and level; history remains unchanged on reload',()=>{
+test('price diagnostics match the displayed direction and level; history remains unchanged on reload',()=>{
  const now=100000,record=startAutomation({checkpoint:initialCheckpoint(),signal:DEFAULT_SIGNAL},1,now);
- for(const seconds of [0,3,15,60,321,86400]){const p=projectScene(record,now+seconds*1000),d=signalDiagnostics(p.checkpoint,p.clock.step);assert.ok(Math.abs(d.trend+d.price+d.variation+d.carry-d.score)<1e-12);assert.equal(p.signal.direction,Math.abs(d.score)<.12?0:Math.sign(d.score));assert.equal(signalHistory(p).at(-1).level,p.signal.level);assert.deepEqual(signalHistory(p),signalHistory(projectScene(p,now+seconds*1000)));assert.ok(signalHistory(p).length<=20)}
+ for(const seconds of [0,3,15,60,321,86400]){const p=projectScene(record,now+seconds*1000),d=signalDiagnostics(p.checkpoint,p.clock.step);assert.ok(Math.abs(d.score)<=1);assert.equal(p.signal.direction,d.direction);assert.equal(p.signal.level,d.level);assert.equal(d.model,2);assert.equal('variation' in d,false);assert.equal(signalHistory(p).at(-1).level,p.signal.level);assert.deepEqual(signalHistory(p),signalHistory(projectScene(p,now+seconds*1000)));assert.ok(signalHistory(p).length<=20)}
  const before=projectScene(record,now+300000),after=projectScene(record,now+303000),a=signalHistory(before),b=signalHistory(after);for(const point of a){const next=b.find(p=>p.step===point.step);if(next)assert.deepEqual(next,point)}
  assert.deepEqual(signalHistory({checkpoint:initialCheckpoint()}),[]);
 });

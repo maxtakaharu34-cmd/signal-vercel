@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {initialCheckpoint,DEFAULT_SIGNAL,validateScene} from '../web/engine.mjs';
-import {startAutomation,stopAutomation,projectScene,newerFrame} from '../web/timeline.mjs';
+import {startAutomation,stopAutomation,projectScene,newerFrame,signalDiagnostics} from '../web/timeline.mjs';
 const NOW=Date.parse('2026-11-06T03:00:00Z');
 const scene=()=>({id:1,version:21,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:new Date(NOW).toISOString()});
 test('all viewers derive the same common frame from server time without mutating the saved anchor',()=>{
@@ -33,24 +33,34 @@ test('invalid clock metadata is rejected and clock rewind does not generate hist
 
 test('a flat automatic scenario also updates its signal from the shared synthetic oscillation',()=>{const running=startAutomation(scene(),0,NOW),samples=Array.from({length:60},(_,i)=>projectScene(running,NOW+(i+1)*1000).signal);assert.ok(new Set(samples.map(s=>s.direction)).size>=2);assert.ok(new Set(samples.map(s=>s.level)).size>=2);assert.deepEqual(projectScene(running,NOW+15000).signal,projectScene(structuredClone(running),NOW+15000).signal)});
 
-test('signals keep varying after the initial ramp in all three scenarios',()=>{
- for(const direction of [-1,0,1]){
-  const running=startAutomation(scene(),direction,NOW),samples=Array.from({length:500},(_,i)=>projectScene(running,NOW+(300+i*3)*1000).signal);
-  assert.equal(new Set(samples.map(s=>s.level)).size,6);
-  assert.ok(samples.some(s=>s.direction===0));
-  if(direction!==0)assert.ok(samples.filter(s=>s.direction===direction).length>samples.length*.6);
-  assert.ok(samples.some((s,i)=>i&&s.level!==samples[i-1].level));
- }
+test('unchanged price evidence is independent of administrator direction, volatility and random seed',()=>{
+ const running=startAutomation(scene(),0,NOW);
+ for(const price of [()=>100,t=>100*Math.exp(.0003*t)]){const reference=signalDiagnostics(running.checkpoint,300,price);for(const direction of [-1,0,1]){const checkpoint=structuredClone(running.checkpoint);checkpoint.config.direction=direction;checkpoint.config.volatility=10;checkpoint.seed=123;assert.deepEqual(signalDiagnostics(checkpoint,300,price),reference)}assert.equal(reference.direction,price(0)===price(300)?0:1)}
 });
 test('the shared three-step hold prevents second-by-second label flicker',()=>{
  const running=startAutomation(scene(),0,NOW);
- for(let t=120;t<300;t+=3){const a=projectScene(running,NOW+t*1000).signal;assert.deepEqual(projectScene(running,NOW+(t+1)*1000).signal,a);assert.deepEqual(projectScene(running,NOW+(t+2)*1000).signal,a)}
+ for(let t=Math.ceil((running.checkpoint.automation.originTime+120)/3)*3-running.checkpoint.automation.originTime;t<300;t+=3){const a=projectScene(running,NOW+t*1000).signal;assert.deepEqual(projectScene(running,NOW+(t+1)*1000).signal,a);assert.deepEqual(projectScene(running,NOW+(t+2)*1000).signal,a)}
 });
 test('a direction command preserves the current signal before gradually changing it',()=>{
  const running=startAutomation(scene(),1,NOW),at=NOW+733000,before=projectScene(running,at),turn=startAutomation(running,-1,at);
  assert.equal(turn.signal.direction,before.signal.direction);assert.equal(turn.signal.level,before.signal.level);
  assert.deepEqual(turn.checkpoint.rows,before.checkpoint.rows);
  assert.equal(validateScene({...turn,checkpoint:{...turn.checkpoint,automation:{...turn.checkpoint.automation,initialSignalScore:Infinity}}}),false);
+});
+test('re-anchoring preserves every signal field between decision candles and validates retained price context',()=>{
+ const running=startAutomation(scene(),1,NOW);
+ for(const step of [120,121,122,731,732,733]){
+  const at=NOW+step*1000,before=projectScene(running,at),turn=startAutomation(running,-1,at);
+  assert.deepEqual(turn.signal,before.signal);
+  assert.deepEqual(projectScene(turn,at).signal,before.signal);
+  const context=turn.checkpoint.automation.signalContext;
+  assert.equal(context.firstTime+context.closes.length-1,turn.checkpoint.automation.originTime);
+  assert.equal(context.closes.at(-1),before.checkpoint.rows.at(-1).close);
+  assert.ok(context.closes.length<=120);
+  for(const invalid of [{...context,firstTime:-1},{...context,closes:[NaN]},{...context,closes:[1]},{...context,closes:Array(121).fill(1)}]){
+   assert.equal(validateScene({...turn,checkpoint:{...turn.checkpoint,automation:{...turn.checkpoint.automation,signalContext:invalid}}}),false);
+  }
+ }
 });
 test('late signals include temporary reversals and do not repeat the same short cycle',()=>{
  const running=startAutomation(scene(),1,NOW),start=86400;

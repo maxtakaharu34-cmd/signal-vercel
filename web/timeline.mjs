@@ -1,9 +1,10 @@
 import {createIrregularPath} from './irregular-price.mjs';
+import {createPriceSignal,signalFromEvidence,SIGNAL_STEP} from './price-signal.mjs';
 // A single deterministic simulation clock. Prices are synthetic and identical
 // for everyone at a given server time; work is bounded to the last 120 candles.
-const LEVELS=['極寒','寒気','晩秋','新春','初夏','猛暑'];
 const TAU=18,RATE=.00012,LIMIT=.25;
-export function validAutomation(a){return !!a&&a.schemaVersion===1&&Number.isSafeInteger(a.anchorMs)&&a.anchorMs>0&&Number.isSafeInteger(a.originTime)&&a.originTime>=0&&Number.isSafeInteger(a.originTotal)&&a.originTotal>=72&&Number.isFinite(a.startPrice)&&a.startPrice>0&&Number.isFinite(a.initialMomentum)&&Math.abs(a.initialMomentum)<=1&&Number.isInteger(a.baseRngState)&&a.baseRngState>=0&&a.baseRngState<=4294967295&&(a.priceModel===undefined||a.priceModel===2)&&(a.modelSeed===undefined||(Number.isInteger(a.modelSeed)&&a.modelSeed>=0&&a.modelSeed<=4294967295))&&(a.previousAutomation===undefined||(!!a.previousAutomation&&!a.previousAutomation.previousAutomation&&validAutomation(a.previousAutomation)))&&(a.initialSignalScore===undefined||(Number.isFinite(a.initialSignalScore)&&Math.abs(a.initialSignalScore)<=1))}
+function validSignalContext(a){const c=a.signalContext;return c===undefined||!!c&&Number.isSafeInteger(c.firstTime)&&c.firstTime>=0&&Array.isArray(c.closes)&&c.closes.length>=1&&c.closes.length<=120&&c.firstTime+c.closes.length-1===a.originTime&&c.closes.every(value=>Number.isFinite(value)&&value>0)&&c.closes.at(-1)===a.startPrice}
+export function validAutomation(a){return !!a&&validSignalContext(a)&&a.schemaVersion===1&&Number.isSafeInteger(a.anchorMs)&&a.anchorMs>0&&Number.isSafeInteger(a.originTime)&&a.originTime>=0&&Number.isSafeInteger(a.originTotal)&&a.originTotal>=72&&Number.isFinite(a.startPrice)&&a.startPrice>0&&Number.isFinite(a.initialMomentum)&&Math.abs(a.initialMomentum)<=1&&Number.isInteger(a.baseRngState)&&a.baseRngState>=0&&a.baseRngState<=4294967295&&(a.priceModel===undefined||a.priceModel===2)&&(a.modelSeed===undefined||(Number.isInteger(a.modelSeed)&&a.modelSeed>=0&&a.modelSeed<=4294967295))&&(a.previousAutomation===undefined||(!!a.previousAutomation&&!a.previousAutomation.previousAutomation&&validAutomation(a.previousAutomation)))&&(a.initialSignalScore===undefined||(Number.isFinite(a.initialSignalScore)&&Math.abs(a.initialSignalScore)<=1))}
 export function automationStep(checkpoint,now=Date.now()){
  const a=checkpoint?.automation;if(!validAutomation(a))return 0;
  return Math.min(Number.MAX_SAFE_INTEGER-a.originTotal-1,Math.max(0,Math.floor((now-a.anchorMs)*checkpoint.config.speed/1000)));
@@ -26,46 +27,32 @@ function priceSampler(checkpoint){
   return Math.max(.001,a.startPrice*Math.exp(drift+movement));
  };
 }
-// Random-access, smooth value noise: no replay, client randomness or repeating
-// sine-only signal cycle. The absolute candle index keeps phases across commands.
-function signalNoise(seed,time,span,salt){
- const slot=Math.floor(time/span),fraction=time/span-slot,smooth=fraction*fraction*(3-2*fraction);
- const value=index=>{let x=(seed^Math.imul(index,0x45d9f3b)^salt)>>>0;x=Math.imul(x^(x>>>16),0x7feb352d);x=Math.imul(x^(x>>>15),0x846ca68b);return ((x^(x>>>16))>>>0)/4294967295*2-1};
- return value(slot)+(value(slot+1)-value(slot))*smooth;
+function contextFromRows(rows,originTime){
+ const tail=rows.filter(row=>row.time<=originTime).slice(-120);if(!tail.length||tail.at(-1).time!==originTime)return undefined;
+ let first=tail.length-1;while(first>0&&tail[first-1].time===tail[first].time-1)first--;
+ return {firstTime:tail[first].time,closes:tail.slice(first).map(row=>row.close)};
 }
-function signalTarget(checkpoint,step,samplePrice){
- const a=checkpoint.automation,time=a.originTime+step,momentum=timelineMomentum(checkpoint,step);
- const previous=Math.max(0,step-8),distance=step-previous;
- const impulse=distance?Math.tanh(Math.log(samplePrice(step)/samplePrice(previous))/distance/(.000025+.000018*checkpoint.config.volatility)):0;
- const settled=-Math.expm1(-step/30),trendWeight=.32+.5*Math.exp(-step/60);
- const trend=1.25*trendWeight*momentum,price=1.25*settled*.48*impulse;
- const variation=1.25*settled*(.66*signalNoise(checkpoint.seed,time,41,0x91ab)+.32*signalNoise(checkpoint.seed,time,17,0x71c3)+.14*signalNoise(checkpoint.seed,time,113,0x34e7));
- const scale=1/Math.max(1,Math.abs(trend+price+variation));
- return {trend:trend*scale,price:price*scale,variation:variation*scale};
+function priceSignal(checkpoint,price=priceSampler(checkpoint)){
+ const a=checkpoint.automation,context=a.signalContext??contextFromRows(checkpoint.rows,a.originTime);
+ return createPriceSignal(time=>{const step=time-a.originTime;if(step>=0)return price(step);const index=time-(context?.firstTime??Infinity);return index>=0&&index<(context?.closes.length??0)?context.closes[index]:null});
 }
 export function signalDiagnostics(checkpoint,step,price=priceSampler(checkpoint)){
- const sample=Math.floor(step/3)*3,weights=[.4,.27,.17,.1,.06],parts={trend:0,price:0,variation:0};
- for(let i=0;i<weights.length;i++){const target=signalTarget(checkpoint,Math.max(0,sample-i*3),price);for(const key of Object.keys(parts))parts[key]+=weights[i]*target[key]}
- const blend=-Math.expm1(-sample/12),carry=(checkpoint.automation.initialSignalScore??checkpoint.automation.initialMomentum)*(1-blend);
- for(const key of Object.keys(parts))parts[key]*=blend;
- const score=Math.max(-1,Math.min(1,parts.trend+parts.price+parts.variation+carry));
- return {...parts,carry,score,sample};
+ const result=priceSignal(checkpoint,price).at(checkpoint.automation.originTime+step);
+ return {...result,sample:result.sample-checkpoint.automation.originTime};
 }
-function signalScore(checkpoint,step,price){return signalDiagnostics(checkpoint,step,price).score}
 export function signalHistory(record,{count=20}={}){
  if(!validAutomation(record?.checkpoint?.automation)||!Number.isSafeInteger(record.clock?.step))return [];
- const checkpoint=record.checkpoint,a=checkpoint.automation,price=priceSampler(checkpoint),last=Math.floor(record.clock.step/3)*3,first=Math.max(0,last-(Math.max(1,Math.min(40,count))-1)*3),result=[];
- for(let step=first;step<=last;step+=3){const signal=automaticSignal(checkpoint,step,price);result.push({step,time:a.originTime+step,...signal})}
+ const checkpoint=record.checkpoint,a=checkpoint.automation,analyzer=priceSignal(checkpoint),last=Math.floor((a.originTime+record.clock.step)/SIGNAL_STEP)*SIGNAL_STEP;
+ const first=Math.max(Math.ceil(a.originTime/SIGNAL_STEP)*SIGNAL_STEP,last-(Math.max(1,Math.min(40,count))-1)*SIGNAL_STEP),result=[];
+ for(let time=first;time<=last;time+=SIGNAL_STEP)result.push({step:time-a.originTime,time,...signalFromEvidence(analyzer.at(time))});
+ // An anchor can sit between decision candles. Its last closed decision is
+ // still visible, without pretending it has a new wall-clock timestamp.
+ if(!result.length)result.push({step:last-a.originTime,time:last,...signalFromEvidence(analyzer.at(last))});
  return result;
 }
-function automaticSignal(checkpoint,step,price=priceSampler(checkpoint)){
- const score=signalScore(checkpoint,step,price),strength=Math.min(1,Math.abs(score)),direction=strength<.12?0:score>0?1:-1;
- const prior=Math.abs(signalScore(checkpoint,Math.max(0,step-6),price)),change=strength-prior;
- const phase=direction===0?'方向を見極め中':change>.035?'勢いが強まっています':change<-.035?'勢いが落ち着いています':'強弱を確認中';
- return {direction,level:LEVELS[Math.min(5,Math.floor(strength*6))],note:phase+'。共通の仮想価格の勢い・方向指示・不規則な揺れから自動算出。実際の市場予測ではありません。'};
-}
+function automaticSignal(checkpoint,step,price=priceSampler(checkpoint)){return signalFromEvidence(priceSignal(checkpoint,price).at(checkpoint.automation.originTime+step))}
 export function projectScene(record,now=Date.now()){
- const checkpoint=record?.checkpoint,a=checkpoint?.automation;if(!validAutomation(a))return record;
+ let checkpoint=record?.checkpoint;const a=checkpoint?.automation;if(!validAutomation(a))return record;const context=a.signalContext??contextFromRows(checkpoint.rows,a.originTime);if(context&&!a.signalContext)checkpoint={...checkpoint,automation:{...a,signalContext:context}};
  if(a.previousAutomation&&now<a.anchorMs)return projectScene({...record,checkpoint:{...checkpoint,automation:a.previousAutomation}},now);
  const price=priceSampler(checkpoint),step=automationStep(checkpoint,now),rows=checkpoint.rows.filter(row=>row.time<=a.originTime),first=Math.max(1,step-119);
  for(let i=first;i<=step;i++){
@@ -79,9 +66,9 @@ export function projectScene(record,now=Date.now()){
 export function startAutomation(record,direction,now=Date.now()){
  if(![-1,0,1].includes(direction))throw Error('シナリオの方向を確認してください。');
  const current=projectScene(record,now),checkpoint=structuredClone(current.checkpoint),old=checkpoint.automation;
- const previousStep=validAutomation(old)?automationStep(checkpoint,now):0,initialSignalScore=validAutomation(old)?signalScore(checkpoint,previousStep):0,initialMomentum=validAutomation(old)?timelineMomentum(checkpoint,previousStep):0,last=checkpoint.rows.at(-1);
+ const previousStep=validAutomation(old)?automationStep(checkpoint,now):0,initialSignalScore=validAutomation(old)?signalDiagnostics(checkpoint,previousStep).score:0,initialMomentum=validAutomation(old)?timelineMomentum(checkpoint,previousStep):0,last=checkpoint.rows.at(-1);
  checkpoint.config.direction=direction;
- checkpoint.automation={schemaVersion:1,priceModel:2,modelSeed:old?.modelSeed??((checkpoint.seed^checkpoint.rngState)>>>0),anchorMs:now,originTime:last.time,originTotal:checkpoint.total,startPrice:last.close,initialMomentum,initialSignalScore,baseRngState:checkpoint.rngState};
+ checkpoint.automation={schemaVersion:1,priceModel:2,modelSeed:old?.modelSeed??((checkpoint.seed^checkpoint.rngState)>>>0),anchorMs:now,originTime:last.time,originTotal:checkpoint.total,startPrice:last.close,initialMomentum,initialSignalScore,baseRngState:checkpoint.rngState,signalContext:contextFromRows(checkpoint.rows,last.time)};
  return {...current,checkpoint,signal:automaticSignal(checkpoint,0),clock:{step:0,generatedAt:new Date(now).toISOString()}};
 }
 export function validAutomationSettings(settings){return !!settings&&[1,2,5,10].includes(settings.speed)&&Number.isInteger(settings.volatility)&&settings.volatility>=1&&settings.volatility<=10&&Object.keys(settings).every(key=>['speed','volatility'].includes(key))}
