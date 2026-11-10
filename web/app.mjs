@@ -20,7 +20,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if(!adminPage&&$('tradeChart')){
   $('tradeChart').hidden=false;
   try{chartController=chartFactory({element:$('tradeChart'),window,onInspect(time){if(time===selectedTime)return;selectedTime=time;paint()},onViewport({following,range}){setText('chartRangeStatus',following?'保持範囲：最新120本':'過去の足を表示中 · 最大120本');$('followLatest')?.setAttribute('aria-pressed',String(following&&selectedTime===null));renderBarPresets(range)}})}catch(error){window.console?.error('Interactive chart unavailable',error);setText('chartRangeStatus','簡易チャート表示')}
-  $('tradeChart').hidden=!chartController;$('chart').hidden=!!chartController;document.body.dataset.chartEngine=chartController?'canvas':'svg';
+  $('tradeChart').hidden=!chartController;$('chart').hidden=!!chartController;$('chart').toggleAttribute('hidden',!!chartController);document.body.dataset.chartEngine=chartController?'canvas':'svg';
  }
  const connection=(label,state='online')=>{setText('connectionLabel',label);$('connection').dataset.state=state};
  const authMessage=text=>setText('authMessage',text);
@@ -96,7 +96,9 @@ if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(
  if($('adminLogout'))$('adminLogout').onclick=async()=>{if(dirty&&!window.confirm('未反映の変更を破棄して管理画面を閉じますか？'))return;stop();const result=await client.auth.signOut();if(result.error){toast(result.error.message);return}const current=await client.auth.getSession();session=current.data?.session||null;await loadSession()};
  const signalGroup=document.querySelector('.signal-context-group'),signalHome=signalGroup?.parentElement;
  function restoreSignal(){if(signalGroup&&signalHome)signalHome.append(signalGroup);$('signalDetailsToggle')?.setAttribute('aria-expanded','false');if($('signalDetailsContent'))$('signalDetailsContent').dataset.expanded='false'}
- if($('signalDetailsToggle'))$('signalDetailsToggle').onclick=()=>{if(!$('signalDialog'))return;$('signalSheetContent').append(signalGroup);$('signalDetailsToggle').setAttribute('aria-expanded','true');$('signalDetailsContent').dataset.expanded='true';$('signalDialog').showModal()};
+ function openSignalDetails(){if(!$('signalDialog'))return;$('signalSheetContent').append(signalGroup);$('signalDetailsToggle').setAttribute('aria-expanded','true');$('signalDetailsContent').dataset.expanded='true';$('signalDialog').showModal()}
+ if($('signalDetailsToggle'))$('signalDetailsToggle').onclick=openSignalDetails;
+ if($('landscapeSignal'))$('landscapeSignal').onclick=openSignalDetails;
  if($('signalSheetClose'))$('signalSheetClose').onclick=()=>$('signalDialog').close();
  $('signalDialog')?.addEventListener('close',restoreSignal);
  function setAdminPane(pane,scroll=false){if(!adminPage)return;document.body.dataset.adminView=pane;document.querySelectorAll('[data-admin-pane]').forEach(link=>{if(link.dataset.adminPane===pane)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current')});if(scroll)window.scrollTo?.({top:0,behavior:'instant'});window.requestAnimationFrame(()=>{if(!destroyed)paint()})}

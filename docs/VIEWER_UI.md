@@ -43,3 +43,19 @@ also includes the notice required by the upstream NOTICE file.
   primary targets, a chart region occupying at least half of 390x844, modal
   close/focus behavior, touch pan/pinch/inspection and a live update while browsing.
   Automated checks do not substitute for these visual checks.
+
+## Browser verification — 2026-11-10
+
+Verified in Chrome against the production build with the production CSP and
+read-only public scene data. Portrait widths 320, 375, 390 and 430 had no page
+horizontal overflow; primary chart/navigation targets were at least 44px. At
+390x844 the chart region was 624px and the default price plot was 508px.
+Also checked 844x390 and 640x320 landscape, expanded chart close visibility,
+1280x800 desktop, keyboard candle selection, native drag pan and wheel zoom,
+historical viewing through live updates, RSI/MACD/bands, the live signal sheet,
+and all data tabs. Full OHLC tables scroll within their container. No application
+console errors were observed. Physical-device multi-touch pinch was not tested.
+
+The browser pass found and fixed an SVG hidden-attribute issue, grid items that
+failed to stretch, a signal-sheet CSS conflict, and insufficient chart space in
+short landscape layouts. The compatibility SVG renderer remains available.

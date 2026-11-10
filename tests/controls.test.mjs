@@ -112,7 +112,7 @@ test('interactive chart inspection renders retained candles outside the initial 
  let bridge,following=0,released=false;const frames=[];
  const a=await boot({chartFactory:options=>{bridge=options;return {update(frame){frames.push(frame);options.onViewport({following:true})},follow(){following++},destroy(){released=true}}}});
  try{
-  const get=id=>a.document.getElementById(id);assert.equal(a.document.body.dataset.chartEngine,'canvas');assert.equal(get('chart').hidden,true);assert.equal(get('tradeChart').hidden,false);
+  const get=id=>a.document.getElementById(id);assert.equal(a.document.body.dataset.chartEngine,'canvas');assert.equal(get('chart').hidden,true);assert.equal(get('chart').hasAttribute('hidden'),true);assert.equal(get('tradeChart').hidden,false);
   const checkpoint=a.app.state().published.checkpoint,row=checkpoint.rows[4];bridge.onInspect(row.time);
   assert.equal(get('selectedCandle').textContent,'T'+row.time);assert.equal(get('ohlc-close').textContent,row.close.toFixed(3));assert.equal(frames.at(-1).selectionTime,row.time);
   const next=structuredClone(checkpoint),last=next.rows.at(-1);next.rows.push({time:last.time+1,open:last.close,close:last.close+.01,high:last.close+.01,low:last.close});next.total++;
@@ -125,6 +125,6 @@ test('the signal sheet reuses live content and restores it on close without dupl
  const a=await boot();try{
   const get=id=>a.document.getElementById(id),card=get('signalCard');get('signalDetailsToggle').click();assert.equal(get('signalDialog').open,true);assert.ok(get('signalSheetContent').contains(card));
   a.remote({version:2,signal:{direction:1,level:'初夏',note:'更新された状態'}});await tick();assert.equal(get('signalLevel').textContent,'初夏');assert.equal(get('signalNote').textContent,'更新された状態');
-  get('signalSheetClose').click();assert.equal(get('signalDialog').open,false);assert.ok(a.document.querySelector('.signal-column').contains(card));assert.equal(get('signalDetailsToggle').getAttribute('aria-expanded'),'false');assert.equal(a.document.querySelectorAll('#signalCard').length,1);assert.equal(a.publishCalls,0);
+  get('signalSheetClose').click();assert.equal(get('signalDialog').open,false);assert.ok(a.document.querySelector('.signal-column').contains(card));assert.equal(get('signalDetailsToggle').getAttribute('aria-expanded'),'false');assert.equal(a.document.querySelectorAll('#signalCard').length,1);get('landscapeSignal').click();assert.equal(get('signalDialog').open,true);get('signalSheetClose').click();assert.equal(get('signalDialog').open,false);assert.equal(a.publishCalls,0);
  }finally{await a.close()}
 });
