@@ -5,6 +5,13 @@ import {metrics} from './lib/analytics.mjs';
 import {studySeries,studySvg} from './studies.mjs';
 import {LEVELS,directionLabel,directionCode} from './engine.mjs';
 const number=(value,digits=3)=>value==null?'—':Number(value).toLocaleString('en-US',{minimumFractionDigits:digits,maximumFractionDigits:digits});
+function renderViewerQuote(element, price) {
+ if (!element || element.textContent === price) return;
+ const emphasis = element.ownerDocument.createElement('span');
+ emphasis.className = 'quote-precision';
+ emphasis.textContent = price.slice(-2);
+ element.replaceChildren(price.slice(0, -2), emphasis);
+}
 const time=value=>value?new Date(value).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):'未公開';
 const shortTime=value=>new Date(value).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23'});
 export function chartGeometry(width,height,count){const right=width-80,top=24,bottom=height-48,step=(right-30)/count;return {right,top,bottom,plotHeight:bottom-top,step,candleWidth:Math.min(6.4,step*.7)}}
@@ -55,7 +62,14 @@ export function renderScene(document,record,{ma=true,bands=false,study='none',ho
  const running=validAutomation(checkpoint.automation);set('settingModel',running?(checkpoint.automation.priceModel===2?'不規則な値動き':'周期モデル（旧）'):'手動');set('settingRunState',running?'自動生成中':'手動／停止');set('generatedAt',running&&record.clock?.generatedAt?time(record.clock.generatedAt):'—');
  const card=$('signalCard');if(card){const tag=card.querySelector('.small-tag'),source=card.querySelector('.signal-source');if(tag)tag.textContent=running?'価格から判定':'管理者設定';if(source)source.textContent=running?signal.note.split('。')[0]+' · 仮想価格の変化から判定':'管理者が設定した仮想シナリオ'}
  const mobileSource=document.querySelector('.signal-bar-label');if(mobileSource)mobileSource.textContent=running?signal.note.split('。')[0]:'手動設定';
- set('quote',number(last.close));set('mobileQuote',number(last.close));set('landscapeQuote',number(last.close));set('priceChangeBase',changeBase==='period'?'表示期間の最初の足比':'直前の足比');set('mobileChangeBase',changeBase==='period'?'表示期間比':'直前足比');set('mobilePriceChange',(change>=0?'+':'')+number(change,2)+'%');$('mobilePriceChange')?.setAttribute('data-tone',change>=0?'up':'down');set('priceChange',(change>=0?'+':'')+number(change,2)+'%');$('priceChange')?.setAttribute('data-tone',change>=0?'up':'down');
+ const formattedPrice = number(last.close);
+ if ($('mobileQuote')) {
+  renderViewerQuote($('quote'), formattedPrice);
+  renderViewerQuote($('mobileQuote'), formattedPrice);
+ } else {
+  set('quote', formattedPrice);
+ }
+ set('landscapeQuote',formattedPrice);set('priceChangeBase',changeBase==='period'?'表示期間の最初の足比':'直前の足比');set('mobileChangeBase',changeBase==='period'?'表示期間比':'直前足比');set('mobilePriceChange',(change>=0?'+':'')+number(change,2)+'%');$('mobilePriceChange')?.setAttribute('data-tone',change>=0?'up':'down');set('priceChange',(change>=0?'+':'')+number(change,2)+'%');$('priceChange')?.setAttribute('data-tone',change>=0?'up':'down');
  const selectedIndex=externalChart?rows.findIndex(row=>row.time===selectionTime):hover,selectionRows=externalChart?rows:data;if($('previousCandle'))$('previousCandle').disabled=selectedIndex===0;if($('nextCandle'))$('nextCandle').disabled=selectedIndex==null||selectedIndex<0||selectedIndex>=selectionRows.length-1;set('statHigh',number(Math.max(...data.map(c=>c.high))));set('statLow',number(Math.min(...data.map(c=>c.low))));set('statRange',number(Math.max(...data.map(c=>c.high))-Math.min(...data.map(c=>c.low))));set('statCount',String(checkpoint.total));
  const tone=signal.direction>0?'up':signal.direction<0?'down':'neutral',symbol=signal.direction>0?'▲':signal.direction<0?'▼':'―';set('mobileSignalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('mobileSignalDirection')?.setAttribute('data-icon',symbol);$('signalDirection')?.setAttribute('data-icon',symbol);$('mobileSignalBar')?.setAttribute('data-tone',tone);$('landscapeTicker')?.setAttribute('data-tone',tone);$('signalDetailsToggle')?.setAttribute('data-tone',tone);set('landscapeSignal',symbol+' '+(signal.direction===0?'待機':directionLabel(signal.direction))+' · '+signal.level);set('mobileSignalLevel',signal.level+' '+(level+1)+'/6');set('mobileScenario','価格の生成方向：'+directionLabel(checkpoint.config.direction)+(running?' · 自動生成':' · 管理者設定'));const differs=signal.direction!==checkpoint.config.direction;set('signalRelation','価格の生成方向は'+directionLabel(checkpoint.config.direction)+'、表示シグナルは'+(signal.direction===0?'待機':directionLabel(signal.direction))+'です。');if($('signalRelation'))$('signalRelation').hidden=!differs;set('signalCode',directionCode(signal.direction));set('signalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('signalCard')?.setAttribute('data-tone',signal.direction>0?'up':signal.direction<0?'down':'neutral');set('signalLevel',signal.level);set('signalFraction',`${level+1} / 6`);set('signalNote',signal.note);
  document.querySelectorAll('[data-mobile-level]').forEach(e=>{const current=Number(e.dataset.mobileLevel)===level;e.classList.toggle('active',current);e.classList.toggle('passed',Number(e.dataset.mobileLevel)<level);if(current)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current')});

@@ -25,11 +25,19 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  let record=null,rows=[],range=null,following=true,selected=null,previousCount=null,previousStudy='none',previousColors=null,lastData=null,destroyed=false,writing=false;
  const format=time=>record?candleTimeLabel(record.checkpoint,Number(time)):'T'+time;
  const chart=createChart(element,{
-  autoSize:true,layout:{background:{type:ColorType.Solid,color:'#ffffff'},textColor:'#687585',fontFamily:'-apple-system, BlinkMacSystemFont, sans-serif',fontSize:11,attributionLogo:true,panes:{separatorColor:'#e3e7ec',separatorHoverColor:'#b9c5d1',enableResize:true}},
-  grid:{vertLines:{color:'#f0f2f5'},horzLines:{color:'#e9edf1'}},
+  autoSize:true,
+  layout:{
+   background:{type:ColorType.Solid,color:'#fcfcfd'},
+   textColor:'#485560',
+   fontFamily:'system-ui, "Segoe UI", Arial, sans-serif',
+   fontSize:11,
+   attributionLogo:true,
+   panes:{separatorColor:'#d7dde3',separatorHoverColor:'#b9c5d1',enableResize:true},
+  },
+  grid:{vertLines:{color:'#eceff2'},horzLines:{color:'#e0e5e9'}},
   crosshair:{mode:CrosshairMode.Normal,vertLine:{color:'#8996a6',labelBackgroundColor:'#34475d'},horzLine:{color:'#8996a6',labelBackgroundColor:'#34475d'}},
-  rightPriceScale:{borderColor:'#e0e5eb',minimumWidth:64,scaleMargins:{top:.12,bottom:.1}},
-  timeScale:{borderColor:'#e0e5eb',timeVisible:true,secondsVisible:true,rightOffset:2,minBarSpacing:3,fixLeftEdge:true,fixRightEdge:true,shiftVisibleRangeOnNewBar:false,tickMarkFormatter:format,tickMarkMaxCharacterLength:8},
+  rightPriceScale:{borderColor:'#cfd6dc',minimumWidth:64,scaleMargins:{top:.12,bottom:.1}},
+  timeScale:{borderColor:'#cfd6dc',timeVisible:true,secondsVisible:true,rightOffset:2,minBarSpacing:3,fixLeftEdge:true,fixRightEdge:true,shiftVisibleRangeOnNewBar:false,tickMarkFormatter:format,tickMarkMaxCharacterLength:8},
   localization:{locale:'ja-JP',timeFormatter:format},
   handleScroll:{mouseWheel:false,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},
   handleScale:{mouseWheel:true,pinch:true,axisPressedMouseMove:true,axisDoubleClickReset:true},
