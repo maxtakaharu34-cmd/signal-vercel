@@ -5,14 +5,14 @@ import {Window} from 'happy-dom';
 import {mountApp} from '../web/app.mjs';
 import {initialCheckpoint,DEFAULT_SIGNAL} from '../web/engine.mjs';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-async function boot({page='viewer',signed=true,admin=false,mfa=false,offline=false,chartWidth=960,chartHeight=380}={}){
+async function boot({page='viewer',signed=true,admin=false,mfa=false,offline=false,chartWidth=960,chartHeight=380,chartFactory}={}){
  const window=new Window({url:'https://example.test/'+(page==='admin'?'admin/':''),settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});
  window.document.write(readFileSync(new URL('../public/'+(page==='admin'?'admin/index.html':'index.html'),import.meta.url),'utf8'));
  let chartSize={width:chartWidth,height:chartHeight,left:0};window.document.getElementById('chart').getBoundingClientRect=()=>chartSize;
  window.confirm=()=>true;let record={id:1,version:1,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:'2026-11-05T08:00:00Z'},remote,authListener,publishCalls=0,rejectPublish=null,publishHold=null;
  const session=signed?{user:{id:'demo-user',email:'owner@example.test'}}:null;
  const client={auth:{getSession:async()=>({data:{session}}),onAuthStateChange:fn=>{authListener=fn;return {data:{subscription:{unsubscribe(){}}}}},mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:'aal1',nextLevel:mfa?'aal2':'aal1'}})}},async rpc(name,args){if(offline)throw Error('offline');if(name==='get_demo_access')return {data:{is_admin:admin}};if(name==='get_demo_scene_events')return {data:[]};if(name==='publish_demo_scene'){publishCalls++;if(rejectPublish)return {error:rejectPublish};if(publishHold)await publishHold;record={...record,version:record.version+1,checkpoint:structuredClone(args.new_checkpoint),signal:structuredClone(args.new_signal),announcement:args.new_announcement};return {data:structuredClone(record)}}throw Error(name)},from(){return {select:()=>({eq:()=>({single:async()=>({data:structuredClone(record)})})})}},channel(){return {on(_event,_filter,fn){remote=fn;return this},subscribe(){return this}}},async removeChannel(){}};
- const app=await mountApp({document:window.document,window,client});
+ const app=await mountApp({document:window.document,window,client,...(chartFactory?{chartFactory}:{})});
  return {window,document:window.document,app,resizeChart(width,height){chartSize={width,height,left:0};window.dispatchEvent(new window.Event('resize'))},get publishCalls(){return publishCalls},holdPublish(){let release;publishHold=new Promise(r=>release=r);return ()=>{publishHold=null;release()}},reject(error){rejectPublish=error},async publish(){window.document.getElementById('publish').click();await tick();await tick()},remote(value){record={...record,...value};remote({new:structuredClone(record)})},auth(next){authListener('SIGNED_OUT',next)},async close(){app.destroy();await window.happyDOM.close()}};
 }
 test('viewer contains the chart, six-level signal and no scenario editing controls',async()=>{const a=await boot();try{assert.equal(a.document.querySelectorAll('[data-dir]').length,0);assert.equal(a.document.querySelectorAll('[data-level-bar]').length,6);assert.equal(a.document.getElementById('signalCode').textContent,'WAIT');assert.match(a.document.getElementById('chart').innerHTML,/<rect/);assert.equal(a.document.getElementById('candleRows').children.length,10)}finally{await a.close()}});
@@ -107,3 +107,24 @@ test('inspected candle remains anchored through a live update; latest button and
  a.document.getElementById('followLatest').click();assert.equal(a.document.getElementById('selectedCandle').textContent,'最新');assert.equal(a.document.getElementById('ohlc-open').textContent,last.close.toFixed(3));
  chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(a.document.getElementById('selectedCandle').textContent,'最新');assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
+
+test('interactive chart inspection renders retained candles outside the initial window and survives a live update',async()=>{
+ let bridge,following=0,released=false;const frames=[];
+ const a=await boot({chartFactory:options=>{bridge=options;return {update(frame){frames.push(frame);options.onViewport({following:true})},follow(){following++},destroy(){released=true}}}});
+ try{
+  const get=id=>a.document.getElementById(id);assert.equal(a.document.body.dataset.chartEngine,'canvas');assert.equal(get('chart').hidden,true);assert.equal(get('tradeChart').hidden,false);
+  const checkpoint=a.app.state().published.checkpoint,row=checkpoint.rows[4];bridge.onInspect(row.time);
+  assert.equal(get('selectedCandle').textContent,'T'+row.time);assert.equal(get('ohlc-close').textContent,row.close.toFixed(3));assert.equal(frames.at(-1).selectionTime,row.time);
+  const next=structuredClone(checkpoint),last=next.rows.at(-1);next.rows.push({time:last.time+1,open:last.close,close:last.close+.01,high:last.close+.01,low:last.close});next.total++;
+  a.remote({version:2,checkpoint:next});await tick();assert.equal(frames.at(-1).record.version,2);assert.equal(frames.at(-1).selectionTime,row.time);assert.equal(get('ohlc-close').textContent,row.close.toFixed(3));
+  get('previousCandle').click();assert.equal(frames.at(-1).selectionTime,row.time-1);
+  get('tradeChart').dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(frames.at(-1).selectionTime,null);assert.equal(following,1);assert.equal(a.publishCalls,0);
+ }finally{await a.close()}assert.equal(released,true);
+});
+test('the signal sheet reuses live content and restores it on close without duplicate IDs or writes',async()=>{
+ const a=await boot();try{
+  const get=id=>a.document.getElementById(id),card=get('signalCard');get('signalDetailsToggle').click();assert.equal(get('signalDialog').open,true);assert.ok(get('signalSheetContent').contains(card));
+  a.remote({version:2,signal:{direction:1,level:'初夏',note:'更新された状態'}});await tick();assert.equal(get('signalLevel').textContent,'初夏');assert.equal(get('signalNote').textContent,'更新された状態');
+  get('signalSheetClose').click();assert.equal(get('signalDialog').open,false);assert.ok(a.document.querySelector('.signal-column').contains(card));assert.equal(get('signalDetailsToggle').getAttribute('aria-expanded'),'false');assert.equal(a.document.querySelectorAll('#signalCard').length,1);assert.equal(a.publishCalls,0);
+ }finally{await a.close()}
+});
