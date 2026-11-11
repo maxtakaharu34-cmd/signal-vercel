@@ -18,7 +18,7 @@ function quoteStrip(location) {
 }
 
 const orderBar=()=>`<div class="chart-order-bar" role="group" aria-label="注文">
- <a class="chart-balance" href="#trades" data-open-tab="trades"><span>テスト残高 <small>テスト価格・入出金不可</small></span><strong class="mono" id="chartBalance">—</strong>${icon('right')}</a>
+ <a class="chart-balance" href="#trades" data-open-tab="trades" aria-label="残高"><strong class="mono" id="chartBalance">—</strong>${icon('right')}</a>
  <button class="order-side-button" type="button" data-order-side="sell" aria-haspopup="dialog" aria-controls="orderDialog" disabled>売り</button>
  <button class="order-side-button" type="button" data-order-side="buy" aria-haspopup="dialog" aria-controls="orderDialog" disabled>買い</button>
 </div>`;
