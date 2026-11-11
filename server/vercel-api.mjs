@@ -1,3 +1,4 @@
+import {campaignApi,publicCampaign} from './campaign-api.mjs';
 import {auth,email,encode,input,json,readSealed,seal} from './auth-session.mjs';
 import {customerRoutes} from './customer-api.mjs';
 import {customerPortal} from './customer-portal.mjs';
@@ -23,6 +24,7 @@ export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=ha
  if(!configured(env))return json({message:'管理者がサーバーの接続設定を確認する必要があります。',code:'SERVER_NOT_CONFIGURED'},503);
  if(request.method==='POST'&&request.headers.get('origin')!==env.SITE_ORIGIN)return json({message:'同じサイトから操作してください。',code:'ORIGIN_DENIED'},403);
  try{
+  if(url.pathname==='/api/campaign'&&request.method==='GET')return await publicCampaign(env,fetcher);
   if(url.pathname.startsWith('/api/customer/')){
    return await customerRoutes(request,env,{fetcher,siteHandler});
   }
@@ -63,10 +65,14 @@ export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=ha
   }
   if(!user)return json({message:'所有者のメール認証が必要です。',code:'SIGN_IN_REQUIRED'},401);
   const customerAdmin=/^\/api\/admin\/customers(?:\/(balance|activity|messages))?$/.test(url.pathname);
-  if(customerAdmin&&!await validCookie(request,{id:user.userId},env.DEMO_BRIDGE_SECRET)){
+  const campaignAdmin=['/api/admin/campaign','/api/admin/customers/campaign'].includes(url.pathname);
+  if((customerAdmin||campaignAdmin)&&!await validCookie(request,{id:user.userId},env.DEMO_BRIDGE_SECRET)){
    return json({message:'管理画面に入口コードでログインしてください。',code:'FORBIDDEN'},403);
   }
-  const response=customerAdmin?await customerPortal(request,env,session.access,fetcher,{admin:true}):await siteHandler(request,env,user);
+  let response;
+  if(campaignAdmin)response=await campaignApi(request,env,fetcher,session.access,{admin:true});
+  else if(customerAdmin)response=await customerPortal(request,env,session.access,fetcher,{admin:true});
+  else response=await siteHandler(request,env,user);
   if(updated)response.headers.append('set-cookie',cookie(await seal(session,env,COOKIE)));return response;
  }catch(error){return json({message:error.message||'通信を確認してください。',code:'AUTH_FAILED'},error.status||502)}
 }

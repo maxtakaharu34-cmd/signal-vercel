@@ -55,10 +55,10 @@ export function createCustomerOrderStore(window,onAuthLost){
  };
 }
 
-export function mountCustomerAccount({document,window,orderPanel}){
+export function mountCustomerAccount({document,window,orderPanel,onSession=()=>{},onAccountRefresh=()=>{}}){
  const byId=id=>document.getElementById(id);
  const button=byId('customerAccountOpen'),dialog=byId('customerAccountDialog');
- if(!button||!dialog)return {destroy(){}};
+ if(!button||!dialog)return {open(){},destroy(){}};
  const message=byId('customerAccountMessage'),email=byId('customerEmail'),mfaCode=byId('customerMfaCode');
  const register=byId('customerRegister'),login=byId('customerLogin');
  const supportDialog=byId('customerSupportDialog'),supportButton=byId('customerSupportOpen');
@@ -118,7 +118,7 @@ export function mountCustomerAccount({document,window,orderPanel}){
    if(notificationToken!==data.notifyToken){
     stopNotify();
     notificationToken=data.notifyToken;
-    stopNotify=subscribeAccountRefresh(window,notificationToken,()=>Promise.all([orderPanel.refresh(),thread?.refresh(),refreshActivity()]));
+    stopNotify=subscribeAccountRefresh(window,notificationToken,()=>Promise.all([orderPanel.refresh(),thread?.refresh(),refreshActivity(),onAccountRefresh()]));
    }
   }else{
    activityTicket++;
@@ -131,6 +131,7 @@ export function mountCustomerAccount({document,window,orderPanel}){
    identity=null;
    orderPanel.setStore(null);
   }
+  onSession(data);
  }
  function clearFactor(){
   byId('customerQr').hidden=true;
@@ -161,7 +162,8 @@ export function mountCustomerAccount({document,window,orderPanel}){
   finally{busy=false;for(const control of controls)control.disabled=false;}
  }
 
- button.onclick=()=>{if(!dialog.open)dialog.showModal();};
+ const open=()=>{if(!dialog.open)dialog.showModal();};
+ button.onclick=open;
  byId('customerAccountClose').onclick=()=>dialog.close();
  dialog.addEventListener('close',()=>{
   if(state==='enroll'){
@@ -216,6 +218,6 @@ export function mountCustomerAccount({document,window,orderPanel}){
   if(state==='ready')return;
   if(!dialog.open)dialog.showModal();
   if(returned==='failed')message.textContent='メール認証を完了できませんでした。リンクの有効期限を確認してください。';
- }).catch(()=>{});
- return {destroy(){destroyed=true;stopNotify();window.clearInterval(timer);thread?.reset();}};
+ }).catch(()=>onSession({enabled:false,state:'guest'}));
+ return {open,destroy(){destroyed=true;stopNotify();window.clearInterval(timer);thread?.reset();}};
 }

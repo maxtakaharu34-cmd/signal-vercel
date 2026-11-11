@@ -79,3 +79,32 @@ test('customer management requires the verified owner and that session’s PIN b
  assert.deepEqual(calls[1].payload,{customerId:customer,commandId:command,balance:1500000,expectedBalance:1000000,reason:'デモ設定'});
  assert.deepEqual(calls[2].messages,[{topic:'demo-account-refresh-'+customer,event:'refresh',payload:{changed:true}}]);
 });
+
+test('campaign visibility is public, but publication and customer reset require the owner and PIN',async()=>{
+ const customerId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const forwarded=[];
+ const fetcher=async(url,options)=>{
+  if(url.endsWith('/demo_campaign_public_state')){
+   assert.equal(options.headers.authorization,undefined);
+   return Response.json({enabled:false,version:1});
+  }
+  if(url.endsWith('/demo_campaign_transaction')){
+   assert.equal(options.headers.authorization,'Bearer '+tokens.access_token);
+   forwarded.push(JSON.parse(options.body));
+   return Response.json({enabled:true,version:2,changed:true});
+  }
+  if(url.endsWith('/broadcast'))return Response.json({});
+  return authFetch(url,options);
+ };
+ const send=(path,body,cookie='',header={})=>handleVercelApi(request(path,body,cookie,header),env,{fetcher});
+ assert.deepEqual(await (await send('/api/campaign')).json(),{enabled:false,version:1});
+ assert.equal((await send('/api/admin/campaign')).status,401);
+ const ownerCookie=(await login()).headers.get('set-cookie');
+ assert.equal((await send('/api/admin/campaign',{enabled:true,version:1},ownerCookie)).status,403);
+ const pin=(await (await send('/api/admin/login',{pin:'111'},ownerCookie)).json()).session;
+ const headers={'x-signal-admin-session':pin};
+ assert.equal((await send('/api/admin/campaign',{enabled:true,version:1},ownerCookie,headers)).status,200);
+ assert.deepEqual(forwarded[0].payload,{enabled:true,version:1});
+ assert.equal((await send('/api/admin/customers/campaign?customer='+customerId,{round:1},ownerCookie,headers)).status,200);
+ assert.deepEqual(forwarded[1].payload,{customerId,round:1});
+});

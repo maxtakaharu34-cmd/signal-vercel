@@ -24,6 +24,10 @@ export function subscribeScene({window,call,onRecord,onStatus,topic,refresh=()=>
 // Each account uses a random topic. Broadcast carries only a wake-up hint.
 export function subscribeAccountRefresh(window,token,refresh){
  if(!/^[0-9a-f-]{36}$/i.test(token??''))return ()=>{};
+ return subscribeRefresh(window,'demo-account-refresh-'+token,refresh);
+}
+
+export function subscribeRefresh(window,topic,refresh){
  return subscribeScene({
   window,
   call:async path=>{
@@ -31,7 +35,7 @@ export function subscribeAccountRefresh(window,token,refresh){
    if(!response.ok)throw Error('更新通知に接続できませんでした。');
    return response.json();
   },
-  topic:'demo-account-refresh-'+token,
+  topic,
   refresh,
   onRecord(){},
   onStatus(){},

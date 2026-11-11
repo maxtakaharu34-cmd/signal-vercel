@@ -55,3 +55,6 @@ Before enabling customer registration, configure Supabase customer email deliver
 
 
 The Vercel owner page includes customer search, customer-visible demo balance adjustments with a required reason, and site-only support threads. The audit records the owner, customer, previous and new balance, timestamp, and reason. A balance can be reduced when there are no open positions or working orders. An account-scoped refresh hint contains no customer data. Clients fetch the actual data from the authenticated API and periodically refresh if the realtime connection is unavailable.
+
+
+The demo campaign is off by default. The owner can publish or hide its banner and reset a selected customer's eligibility. The first five audited owner balance increases are eligible for the exact published bonus tiers. A customer explicitly selects one credit and applies the bonus, once per eligibility round. A reset keeps previously credited demo balance and the audit trail. All amounts are virtual.

@@ -1,3 +1,4 @@
+import {mountAdminCampaign,mountViewerCampaign} from './campaign.mjs';
 import {mountAdminCustomers} from './admin-customers.mjs';
 import {mountCustomerAccount} from './customer-account.mjs';
 import {createTerminalChart} from './terminal-chart.mjs';
@@ -16,7 +17,7 @@ import {eventsCsv,sceneJson,saveDownload} from './exports.mjs';
 import {sceneChanges,renderChanges} from './change-summary.mjs';
 export async function mountApp({document=globalThis.document,window=globalThis.window,client:providedClient=null,fetchConfig=null,chartFactory=createTerminalChart}={}){
  const $=id=>document.getElementById(id),adminPage=document.body.dataset.page==='admin';
- let adminCustomers;
+ let adminCustomers,adminCampaign,viewerCampaign;
  let client=providedClient,repository,session=null,isAdmin=false,ready=false,mfaWaiting=false,factorId=null,epoch=0,destroyed=false;
  let published={id:1,version:0,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:null},engine=createEngine(published.checkpoint),signal={...published.signal},announcement='',dirty=false,conflict=false,saving=false,playing=false,live=false,loadFailed=false,polling=false,lastPoll=0,pendingRemote=null,autoApply=false,applyTimer=null,lastReadAt=0,eventRows=[],hover=null,selectedTime=null,ma=true,bands=false,maxBars=null,unsubscribe=()=>{},authUnsubscribe=()=>{},playTimer=null,autoTimer=null,pollTimer=null,toastTimer=null;
  const preferences=adminPage?{colors:'jp',maxBars:null,changeBase:'previous'}:readDisplayPreferences(window);maxBars=preferences.maxBars;ma=preferences.ma!==false;bands=preferences.bands===true;let study=preferences.study||'none',changeBase=preferences.changeBase,flashTimer=null,viewFrame=null;let priceStreak=createPriceStreak();
@@ -61,7 +62,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
   renderOwnerAuth();
   document.body.dataset.ready=String(ready);if($('chartLoading'))$('chartLoading').hidden=ready;if($('chartArea'))$('chartArea').setAttribute('aria-busy',String(!ready));
   const authorized=!!session&&isAdmin&&ready&&!mfaWaiting,offline=window.navigator.onLine===false;
-  if(adminPage){document.body.dataset.authorized=String(authorized);$('adminGate').hidden=authorized;$('adminContent').hidden=!authorized;setText('adminIdentity',authorized?session.user.email:'');adminCustomers?.setActive(authorized&&document.body.dataset.adminView==='customers');}
+  if(adminPage){document.body.dataset.authorized=String(authorized);$('adminGate').hidden=authorized;$('adminContent').hidden=!authorized;setText('adminIdentity',authorized?session.user.email:'');adminCustomers?.setActive(authorized&&document.body.dataset.adminView==='customers');adminCampaign?.setActive(authorized&&document.body.dataset.adminView==='campaign');}
   if($('adminLogout'))$('adminLogout').hidden=!authorized;if($('siteSignInLink'))$('siteSignInLink').hidden=!!session;if($('ownerEmailForm'))$('ownerEmailForm').hidden=!!session;if($('ownerVerifyForm')&&session)$('ownerVerifyForm').hidden=true;if($('ownerLinkPanel')&&session)$('ownerLinkPanel').hidden=true;if($('pinForm')&&$('ownerEmailForm'))$('pinForm').hidden=!session;
   if(adminPage){document.querySelectorAll('.control-body button,.control-body input,.control-body select,.control-body textarea,#reset').forEach(e=>e.disabled=!authorized||(saving&&!autoApply)||conflict);$('publish').disabled=!authorized||saving||conflict||offline;$('discard').disabled=!authorized||saving;if($('autoApply')){$('autoApply').disabled=!authorized||saving||conflict;$('autoApply').checked=autoApply;}setText('draftState',conflict?'他の画面の更新あり':dirty?'未反映の変更あり':'公開内容と一致');$('draftState').dataset.dirty=String(dirty||conflict);setText('publish',saving?'公開しています…':'全閲覧者へ公開');const running=automated();document.body.dataset.automated=String(running);setText('adminWorkflowHint',running?'自動更新中です。方向の指示と停止は、そのまま全閲覧者へ反映されます。':'① 値動き → ② シグナル → ③ 公開の順に設定します。');
    if(running){document.querySelectorAll('#adminControls>.control-panel:not(.automation-panel) button,#adminControls>.control-panel:not(.automation-panel) input,#adminControls>.control-panel:not(.automation-panel) select,#adminControls>.control-panel:not(.automation-panel) textarea,#announcementInput,#publish,#autoApply').forEach(e=>e.disabled=true);setText('draftState','自動更新中 · #'+published.version)}
@@ -171,22 +172,26 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if($('landscapeSignal'))$('landscapeSignal').onclick=openSignalDetails;
  if($('signalSheetClose'))$('signalSheetClose').onclick=()=>$('signalDialog').close();
  $('signalDialog')?.addEventListener('close',restoreSignal);
- const adminPanes={controls:'adminControls',preview:'adminPreview',customers:'adminCustomers'};
+ const adminPanes={controls:'adminControls',preview:'adminPreview',customers:'adminCustomers',campaign:'adminCampaign'};
  function setAdminPane(pane,scroll=false){
   if(!adminPage)return;
+  const scenario=pane==='controls'||pane==='preview';
   document.body.dataset.adminView=pane;
-  if($('adminPageTitle'))setText('adminPageTitle',pane==='customers'?'顧客管理':'表示画面の設定');
-  if($('adminWorkflowHint'))$('adminWorkflowHint').hidden=pane==='customers';
-  if($('draftState'))$('draftState').hidden=pane==='customers';
-  if($('adminWorkspace'))$('adminWorkspace').hidden=pane==='customers';
+  const titles={customers:'顧客管理',campaign:'キャンペーン管理'};
+  if($('adminPageTitle'))setText('adminPageTitle',titles[pane]??'表示画面の設定');
+  if($('adminWorkflowHint'))$('adminWorkflowHint').hidden=!scenario;
+  if($('draftState'))$('draftState').hidden=!scenario;
+  if($('adminWorkspace'))$('adminWorkspace').hidden=!scenario;
   if($('adminCustomers'))$('adminCustomers').hidden=pane!=='customers';
+  if($('adminCampaign'))$('adminCampaign').hidden=pane!=='campaign';
   document.querySelectorAll('[data-admin-pane]').forEach(link=>{
    if(link.dataset.adminPane===pane)link.setAttribute('aria-current','page');
    else link.removeAttribute('aria-current');
   });
   adminCustomers?.setActive(document.body.dataset.authorized==='true'&&pane==='customers');
+  adminCampaign?.setActive(document.body.dataset.authorized==='true'&&pane==='campaign');
   if(scroll){
-   if(pane!=='customers'&&!window.matchMedia('(max-width: 767px)').matches)$(adminPanes[pane])?.scrollIntoView?.();
+   if(scenario&&!window.matchMedia('(max-width: 767px)').matches)$(adminPanes[pane])?.scrollIntoView?.();
    else window.scrollTo?.({top:0,behavior:'instant'});
   }
   window.requestAnimationFrame(()=>{if(!destroyed)paint();});
@@ -199,6 +204,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  });
  if(adminPage){
   if($('adminCustomers'))adminCustomers=mountAdminCustomers({document,window,call:(...args)=>client.adminCustomerRequest(...args)});
+  if($('adminCampaign'))adminCampaign=mountAdminCampaign({document,call:(...args)=>client.adminCustomerRequest(...args)});
   const pane=Object.keys(adminPanes).find(key=>'#'+adminPanes[key]===window.location.hash);
   setAdminPane(pane??'controls');
  }
@@ -314,10 +320,18 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    onOrdersChange:orders=>{orderData=orders;updateOrderLevels();},
    notify:toast,
   });
-  customerAccount=mountCustomerAccount({document,window,orderPanel});
+  if($('campaignBanner'))viewerCampaign=mountViewerCampaign({
+   document,window,openLogin:()=>customerAccount?.open(),
+   onApplied:()=>orderPanel.refresh(),
+  });
+  customerAccount=mountCustomerAccount({
+   document,window,orderPanel,
+   onSession:value=>viewerCampaign?.setSession(value),
+   onAccountRefresh:()=>viewerCampaign?.refresh(),
+  });
  }
  const clock=()=>{renderOwnerAuth();setText('clock',new Date().toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false})+' JST');renderSyncInfo()};clock();const clockTimer=window.setInterval(clock,1000);paint();
  try{if(!client)client=createSiteClient(window);repository=createSceneRepository(client);const initial=!adminPage&&client.siteAuth?{data:{session:null}}:await client.auth.getSession();if(initial.error)throw initial.error;session=initial.data.session;await loadSession();const listener=client.auth.onAuthStateChange((event,next)=>{if(session?.user?.id===next?.user?.id&&ready&&event!=='SIGNED_OUT'){session=next;return}session=next;factorId=null;window.setTimeout(()=>{if(!destroyed)void loadSession()},0)});authUnsubscribe=()=>listener.data.subscription.unsubscribe();}catch(error){connection('接続を確認','error');authMessage(error.message);gates();setText('gateMessage','接続を確認できません。管理権限は付与されていません。')}
- return {destroy(){destroyed=true;++epoch;chartController?.destroy();customerAccount?.destroy();adminCustomers?.destroy();orderPanel?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
+ return {destroy(){destroyed=true;++epoch;chartController?.destroy();customerAccount?.destroy();adminCustomers?.destroy();adminCampaign?.setActive(false);viewerCampaign?.destroy();orderPanel?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
 }
 if(typeof globalThis.document!=='undefined'&&typeof globalThis.window!=='undefined')void mountApp();

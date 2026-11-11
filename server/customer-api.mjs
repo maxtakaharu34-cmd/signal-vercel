@@ -1,3 +1,4 @@
+import {campaignApi} from './campaign-api.mjs';
 import {auth,email,encode,input,json,readSealed,seal} from './auth-session.mjs';
 import {customerPortal,portalRpc} from './customer-portal.mjs';
 import {customerOrders} from './customer-orders.mjs';
@@ -130,6 +131,7 @@ export async function customerRoutes(request,env,{fetcher,siteHandler}){
   }
  }
  if(!verifiedAssurance(session,user))return reply(json({code:'MFA_REQUIRED',message:'認証アプリで二段階認証を完了してください。'},403));
+ if(path==='/api/customer/campaign')return reply(await campaignApi(request,env,fetcher,session.access));
  if(path==='/api/customer/orders')return reply(await customerOrders(request,env,session.access,{fetcher,siteHandler}));
  if(['/api/customer/activity','/api/customer/messages'].includes(path))return reply(await customerPortal(request,env,session.access,fetcher));
  return json({message:'ページが見つかりません。'},404);

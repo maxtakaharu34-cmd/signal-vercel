@@ -126,3 +126,33 @@ body[data-page=admin]{--bg:#10161f;--panel:#19212c;--panel2:#202c3b;--border:#34
  .admin-section-nav a {padding-inline:6px}
  .admin-customer-search input,.admin-balance-form input,.support-compose textarea {font-size:16px}
 }
+
+.campaign-banner {
+ display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 14px;padding:8px 12px;
+ border:1px solid var(--border);border-left:3px solid var(--blue);background:var(--panel);
+}
+.campaign-banner h2 {font-size:14px}
+.campaign-banner p,.campaign-dialog>p {color:var(--muted);font-size:12px}
+.campaign-banner button,.campaign-dialog button {flex:none;min-height:44px}
+.campaign-dialog>p {margin-top:8px}
+.campaign-tiers {margin:10px 0;border-top:1px solid var(--border);max-width:420px}
+.campaign-tiers div {display:flex;justify-content:space-between;gap:12px;padding:5px 8px;border-bottom:1px solid var(--border)}
+.campaign-tiers div:first-child {color:var(--muted);background:var(--panel2)}
+.campaign-tiers dd {margin:0;font-weight:650;text-align:right}
+.campaign-claim {display:grid;gap:5px;margin-top:8px}
+.campaign-claim select {min-height:44px;width:100%;padding:5px;border:1px solid var(--border);border-radius:3px;background:var(--panel2);color:var(--text)}
+.campaign-check {display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer}
+.campaign-check input {width:18px;height:18px;accent-color:var(--blue)}
+.admin-campaign-body {padding:14px}
+.admin-campaign form {display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-bottom:8px}
+.admin-campaign-history-title {margin-top:18px}
+.admin-customer-campaign {border-bottom:1px solid var(--border);padding-bottom:10px}
+.admin-customer-campaign details summary {min-height:44px;line-height:44px;color:var(--blue);cursor:pointer}
+.admin-customer-campaign details button {min-height:44px;margin-top:6px}
+@media (max-width:767px){
+ .admin-section-nav a {min-width:0;font-size:11px;padding-inline:4px;white-space:normal;text-align:center}
+ .campaign-banner {gap:8px;padding:6px 8px}
+ .campaign-banner h2 {font-size:13px}
+ .campaign-banner p {font-size:11px}
+ .campaign-claim select {font-size:16px}
+}

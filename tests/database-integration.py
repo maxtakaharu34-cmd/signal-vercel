@@ -126,3 +126,46 @@ assert not portal(a,'admin_list',{'query':'viewer@'},aal=owner_aal)['customers']
 assert portal(b,'messages',{'before':answer['id']})['messages']==[sent]
 as_user(b,"select * from demo_private.customer_support_messages",False)
 print('PASS: customer threads are isolated, owner replies update the queue, and history paginates without exposing actor identifiers')
+
+# The demo campaign is driven by audited owner credits, with no deposit path.
+def campaign(user,operation,payload=None,key=cloud_key,aal='aal2',ok=True):
+ query="select public.demo_campaign_transaction("+lit(key)+","+lit(operation)+","+lit(json.dumps(payload or {}))+"::jsonb)"
+ result=as_user(user,"select set_config('request.jwt.claim.aal',"+lit(aal)+",true);"+query,ok)
+ return json.loads(result) if ok else None
+assert json.loads(run('set role anon;select public.demo_campaign_public_state()'))=={'enabled':False,'version':1}
+run("set role anon;select public.demo_campaign_transaction('', 'status', '{}')",False)
+campaign(b,'admin_publish',{'enabled':True,'version':1},ok=False)
+campaign(b,'status',aal='aal1',ok=False)
+assert campaign(a,'admin_publish',{'enabled':True,'version':1},aal=owner_aal)['changed']
+campaign(a,'admin_publish',{'enabled':False,'version':1},aal=owner_aal,ok=False)
+assert json.loads(run('set role anon;select public.demo_campaign_public_state()'))=={'enabled':True,'version':2}
+
+from uuid import uuid4
+credits=[]
+booked=1500000
+for amount in (100000,200000,300000,20000,100000):
+ credit_id=str(uuid4())
+ assert portal(a,'admin_adjust',{'customerId':b,'commandId':credit_id,'balance':booked+amount,'expectedBalance':booked,'reason':'仮想クレジット'},aal=owner_aal)['changed']
+ credits.append(credit_id)
+ booked+=amount
+status=campaign(b,'status',{'customerId':a})
+assert [(row['credit_id'],row['credit_number'],row['bonus_amount']) for row in status['credits']]==[
+ (credits[0],2,50000),(credits[1],3,150000),(credits[2],4,300000)]
+claim={'creditId':credits[1],'round':1,'commandId':str(uuid4()),'apply':True}
+campaign(b,'claim',{**claim,'apply':False},ok=False)
+campaign(b,'claim',{**claim,'creditId':credits[4]},ok=False)
+assert campaign(b,'claim',claim)['bonus']==150000
+assert campaign(b,'claim',claim)['duplicate']
+assert customer_call(b)['account']['balance']==booked+150000
+assert campaign(b,'status')['claimed']
+campaign(b,'claim',{**claim,'commandId':str(uuid4())},ok=False)
+assert portal(b,'activity')['adjustments'][0]['reason']=='デモキャンペーンボーナス'
+assert campaign(a,'admin_reset',{'customerId':b,'round':1},aal=owner_aal)['reset']
+assert customer_call(b)['account']['balance']==booked+150000
+assert campaign(b,'status')['round']==2 and not campaign(b,'status')['claimed']
+campaign(b,'claim',{**claim,'commandId':str(uuid4())},ok=False)
+assert campaign(a,'admin_publish',{'enabled':False,'version':2},aal=owner_aal)['changed']
+campaign(b,'claim',{**claim,'round':2,'commandId':str(uuid4())},ok=False)
+assert [event['action'] for event in campaign(a,'admin_settings',aal=owner_aal)['history']]==['hide','show']
+assert run("select count(*) from demo_private.demo_campaign_audit where action='reset' and actor_id="+lit(a))=='1'
+print('PASS: exact bonus tiers, first five credits, one-time use, retained balance on owner reset and campaign audit')

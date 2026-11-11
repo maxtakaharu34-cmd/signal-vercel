@@ -9,7 +9,10 @@ export function mountAdminCustomers({document,window,call}){
  const reason=$('adminBalanceReason'),save=$('adminBalanceSave'),balanceStatus=$('adminBalanceStatus');
  const history=$('adminBalanceHistory'),nextButton=$('adminCustomerNext'),previousButton=$('adminCustomerPrevious');
  let active=false,selected=null,customers=[],next=null,cursors=[null],query='',listRequest=0;
+ const campaignState=$('adminCustomerCampaignState'),campaignResetBox=$('adminCustomerCampaignResetBox');
+ const campaignReset=$('adminCustomerCampaignReset'),campaignMessage=$('adminCustomerCampaignStatus');
  let detailGeneration=0,stopNotify=()=>{},busy=false,lastWrite=null,draftBase=null;
+ let currentCampaign=null,campaignBusy=false,campaignTicket=0;
  const targetPath=(segment,customer=selected,before=null)=>{
   const params=new URLSearchParams({customer:customer.id});
   if(before)params.set('before',before);
@@ -85,11 +88,53 @@ export function mountAdminCustomers({document,window,call}){
    if(active&&ticket===detailGeneration)renderBalanceHistory(history,adjustments);
   }catch(error){if(active&&ticket===detailGeneration)renderBalanceHistory(history,[],error.message);}
  }
+ function clearCampaign(){
+  campaignTicket++;
+  currentCampaign=null;
+  campaignBusy=campaignReset.disabled=false;
+  campaignState.textContent='';
+  campaignMessage.textContent='';
+  campaignResetBox.open=false;
+  campaignResetBox.hidden=true;
+ }
+ async function loadCampaign(){
+  if(!active||!selected||campaignBusy)return;
+  const current=detailGeneration,ticket=++campaignTicket;
+  try{
+   const data=await call(targetPath('campaign'));
+   if(!active||current!==detailGeneration||ticket!==campaignTicket)return;
+   currentCampaign=data;
+   campaignResetBox.hidden=!data.claimed;
+   campaignState.textContent=data.claimed?'利用済み（＋'+demoYen(data.usedBonus)+'）':
+    data.credits.length?'未利用 · 対象 '+data.credits.length+' 件':'未利用 · 対象なし';
+  }catch(error){if(active&&current===detailGeneration&&ticket===campaignTicket)campaignState.textContent=error.message;}
+ }
+ campaignReset.onclick=async()=>{
+  if(!active||!selected||!currentCampaign?.claimed||campaignBusy)return;
+  const current=detailGeneration;
+  campaignTicket++;
+  campaignBusy=campaignReset.disabled=true;
+  campaignMessage.textContent='';
+  try{
+   await call(targetPath('campaign'),'POST',{round:currentCampaign.round});
+   if(active&&current===detailGeneration){
+    campaignResetBox.open=false;
+    campaignMessage.textContent='ボーナスを再度利用できるようにしました。';
+   }
+  }catch(error){if(active&&current===detailGeneration)campaignMessage.textContent=error.message;}
+  finally{
+   if(current===detailGeneration){
+    campaignBusy=campaignReset.disabled=false;
+    void loadCampaign();
+   }
+  }
+ };
  function select(customer){
   if(busy||selected?.id===customer.id)return;
   detailGeneration++;
   stopNotify();
   thread.reset();
+  clearCampaign();
   selected=customer;
   lastWrite=null;
   detail.hidden=false;
@@ -103,8 +148,9 @@ export function mountAdminCustomers({document,window,call}){
   history.replaceChildren();
   renderList();
   void loadActivity();
+  void loadCampaign();
   void thread.refresh();
-  stopNotify=subscribeAccountRefresh(window,customer.notify_token,()=>Promise.all([thread.refresh(),loadActivity(),loadList({silent:true})]));
+  stopNotify=subscribeAccountRefresh(window,customer.notify_token,()=>Promise.all([thread.refresh(),loadActivity(),loadCampaign(),loadList({silent:true})]));
  }
 
  function clearSelection(){
@@ -123,6 +169,7 @@ export function mountAdminCustomers({document,window,call}){
   reason.value='';
   lastWrite=null;
   history.replaceChildren();
+  clearCampaign();
   thread.reset();
  }
 
@@ -134,7 +181,7 @@ export function mountAdminCustomers({document,window,call}){
   cursors=[null];
   void loadList();
  };
- $('adminCustomersRefresh').onclick=()=>{void loadList();void loadActivity();void thread.refresh();};
+ $('adminCustomersRefresh').onclick=()=>{void loadList();void loadActivity();void loadCampaign();void thread.refresh();};
  nextButton.onclick=()=>{if(next&&!busy){clearSelection();cursors.push(next);void loadList();}};
  previousButton.onclick=()=>{if(cursors.length>1&&!busy){clearSelection();cursors.pop();void loadList();}};
  $('adminBalanceForm').onsubmit=async event=>{
@@ -171,7 +218,7 @@ export function mountAdminCustomers({document,window,call}){
  };
 
  const timer=window.setInterval(()=>{
-  if(active&&!document.hidden){void loadList({silent:true});void thread.refresh();}
+  if(active&&!document.hidden){void loadList({silent:true});void loadCampaign();void thread.refresh();}
  },8000);
  return {
   setActive(value){
