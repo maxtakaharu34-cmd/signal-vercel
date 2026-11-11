@@ -120,6 +120,18 @@ body[data-page=viewer] .chart-order-bar {
   font-size:11px;
   white-space:nowrap;
 }
+body[data-page=viewer] .chart-balance {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:44px;
+  padding:0 6px;
+  margin-inline-end:auto;
+  color:var(--text);
+}
+body[data-page=viewer] .chart-balance small {font-size:10px;color:var(--muted)}
+body[data-page=viewer] .chart-balance strong {font-size:14px;font-weight:650}
+body[data-page=viewer] .chart-balance .icon {width:14px;color:var(--muted)}
 body[data-page=viewer] .order-side-button {
   min-width:80px;
   min-height:44px;
@@ -392,20 +404,26 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
 }
 
 @media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
- body[data-page=viewer] .chart-order-bar {justify-content:stretch}
- body[data-page=viewer] .chart-order-bar .order-side-button {flex:1;min-width:0}
+ body[data-page=viewer] .chart-order-bar {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));row-gap:0}
+ body[data-page=viewer] .chart-balance {grid-column:1/-1;margin:0;justify-content:space-between}
+ body[data-page=viewer] .chart-balance strong {margin-inline-start:auto}
+ body[data-page=viewer] .chart-order-bar .order-side-button {min-width:0}
  body[data-page=viewer] .order-dialog {width:100%;max-width:100%}
 }
 @media(orientation:landscape) and (max-height:500px) and (max-width:1000px){
  body[data-page=viewer] .chart-actions {display:flex}
  body[data-page=viewer] .chart-actions .chart-bottom {flex:1;min-width:0}
  body[data-page=viewer] .chart-order-bar {
-  flex:0 0 146px;
+  flex:0 0 auto;
+  grid-template-columns:auto repeat(2,minmax(50px,1fr));
   min-height:44px;
   gap:4px;
   padding:0 4px;
   border-inline-start:1px solid var(--border);
  }
+ body[data-page=viewer] .chart-balance {grid-column:auto;gap:5px;padding-inline:4px}
+ body[data-page=viewer] .chart-balance span {display:grid;line-height:1.2}
+ body[data-page=viewer] .chart-balance strong {font-size:12px}
  body[data-page=viewer] .chart-order-bar .order-side-button {border-radius:0}
 }
 @media(max-width:767px) and (max-height:620px){

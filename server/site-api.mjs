@@ -43,9 +43,9 @@ export async function handleSiteApi(request,env,user=null){
    const source=await bridge(env,identity,'read');
    if(source.scene.version!==input.expected_version)return json({message:'他の画面で更新されています。再同期してください。',code:'PT409'},409);
    if(!validateScene(source.scene))return json({message:'保存データを確認してください。'},502);
-   if(input.action==='tune'&&!validAutomation(source.scene.checkpoint.automation))return json({message:'先に自動シミュレーションを開始してください。',code:'AUTOMATION_STOPPED'},409);
+   if(input.action==='tune'&&!validAutomation(source.scene.checkpoint.automation))return json({message:'先に価格の自動生成を開始してください。',code:'AUTOMATION_STOPPED'},409);
    const now=Date.now(),next=input.action==='stop'?stopAutomation(source.scene,now):input.action==='tune'?tuneAutomation(source.scene,input.settings,now):startAutomation(source.scene,input.direction,now);
-   const label=input.action==='stop'?'自動シミュレーションを停止':input.action==='tune'?'自動更新の速さ・値動きの大きさを変更':'自動シミュレーションを'+directionLabel(input.direction)+'へ変更';
+   const label=input.action==='stop'?'自動生成を停止':input.action==='tune'?'自動更新の速さ・値動きの大きさを変更':'自動生成の方向を'+directionLabel(input.direction)+'へ変更';
    const payload={expected_version:input.expected_version,new_checkpoint:next.checkpoint,new_signal:next.signal,new_announcement:next.announcement,event_label:label};
    const saved=await bridge(env,identity,'publish',payload),notified=await notifySceneSaved(env);
    return json({...projectScene(saved.scene,now),delivery:{notified}});

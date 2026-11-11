@@ -60,7 +60,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   const row=getScene()?.checkpoint.rows.at(-1);
   const {account,positions,pending}=currentOrders;
   const totals=account?accountSnapshot(account.balance,positions,pending,row):null;
-  for(const [id,key] of Object.entries({accountBalance:'balance',accountEquity:'equity',accountProfit:'profit',accountMargin:'margin',accountReserved:'reserved',accountAvailable:'available'}))set(id,money(totals?.[key]));
+  for(const [id,key] of Object.entries({chartBalance:'balance',accountBalance:'balance',accountEquity:'equity',accountProfit:'profit',accountMargin:'margin',accountReserved:'reserved',accountAvailable:'available'}))set(id,money(totals?.[key]));
   set('accountRatio',totals?.ratio==null?'—':(totals.ratio*100).toFixed(1)+'%');
   matchLatest();
   for (const trigger of triggers) trigger.disabled = !quote;
