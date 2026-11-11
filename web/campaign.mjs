@@ -31,7 +31,7 @@ export function mountViewerCampaign({document,window,openLogin,onApplied}){
   else if(!ready)availability.textContent=session?.enabled?'対象額はログイン後に確認できます。':'現在はキャンペーン条件を確認できます。';
   else if(eligibility?.claimed)availability.textContent='この口座では適用済みです。';
   else if(!eligibility)availability.textContent='口座の利用状況を確認しています。';
-  else availability.textContent=available?'対象の残高追加を選択してください。':'対象の仮想残高追加はありません。';
+  else availability.textContent=available?'対象の残高追加を選択してください。':'対象の残高追加はありません。';
   if(available){
    const entries=eligibility.credits,prior=options.value;
    if([...options.options].map(option=>option.value).join(',')!==entries.map(item=>item.credit_id).join(',')){
@@ -87,7 +87,7 @@ export function mountViewerCampaign({document,window,openLogin,onApplied}){
    read++;
    eligibility={...eligibility,claimed:true};
    request=null;
-   status.textContent=result.bonus?demoYen(result.bonus)+'分の仮想残高ボーナスを適用しました。':'仮想残高ボーナスは適用済みです。';
+   status.textContent=result.bonus?demoYen(result.bonus)+'分の残高ボーナスを適用しました。':'残高ボーナスは適用済みです。';
    render();
    await onApplied();
   }catch(error){

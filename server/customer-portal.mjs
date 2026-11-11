@@ -4,7 +4,7 @@ import {input,json} from './auth-session.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(message,status=400)=>json({message},status);
 const errors={
- PT404:[404,'仮想口座が見つかりません。'],
+ PT404:[404,'口座が見つかりません。'],
  PT409:[409,'他の操作でデータが更新されました。内容を確認してからやり直してください。'],
  PT422:[422,'保有建玉または未約定注文がある間は残高を減額できません。'],
  '42501':[403,'この操作を行う権限がありません。'],
@@ -22,7 +22,7 @@ export async function portalRpc(env,access,fetcher,operation,payload={}){
  });
  const data=await response.json();
  if(!response.ok){
-  const [status,message]=errors[data.code]??[502,'仮想口座との接続を確認してください。'];
+  const [status,message]=errors[data.code]??[502,'口座との接続を確認してください。'];
   throw Object.assign(Error(message),{status});
  }
  return data;

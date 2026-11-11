@@ -44,4 +44,4 @@ export function createPriceSignal(closeAt, offset=0){
  return {at};
 }
 
-export function signalFromEvidence(evidence){return {direction:evidence.direction,level:evidence.level,note:evidence.phase+'。仮想価格の方向・一致度・継続性から判定。実際の市場予測ではありません。'}}
+export function signalFromEvidence(evidence){return {direction:evidence.direction,level:evidence.level,note:evidence.phase+'。価格の方向・一致度・継続性から判定。実際の市場予測ではありません。'}}

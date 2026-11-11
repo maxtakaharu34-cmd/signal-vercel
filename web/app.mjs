@@ -234,7 +234,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
   });
   const filename=['signal-desk-demo',marketView?marketView.period+'s':null,adminPage?null:selectedInstrument().replace('/','-'),adminPage?null:preferences.side].filter(Boolean).join('-')+'.csv';
   saveDownload(window,document,[heading,...values].join('\n'),filename,'text/csv;charset=utf-8');
-  toast('仮想指数のCSVを保存しました');
+  toast('指数のCSVを保存しました');
  };
  if($('exportScene'))$('exportScene').onclick=()=>{if(!ready||published.version<1)return;saveDownload(window,document,sceneJson(published),'fx-sim-scene-v'+published.version+'.json','application/json');toast('公開済みの設定を書き出しました')};
  if($('exportEvents'))$('exportEvents').onclick=()=>{if(!ready||!eventRows.length)return;saveDownload(window,document,eventsCsv(eventRows),'fx-sim-history-v'+published.version+'.csv','text/csv;charset=utf-8');toast('取得済みの変更履歴を書き出しました（最大30件）')};

@@ -15,7 +15,7 @@ async function database(env,access,fetcher,operation,commandId,payload={}){
   signal:AbortSignal.timeout(12000),
  });
  const data=await response.json();
- if(!response.ok)throw Object.assign(Error('仮想口座との接続を確認してください。'),{status:response.status===409?409:502});
+ if(!response.ok)throw Object.assign(Error('口座との接続を確認してください。'),{status:response.status===409?409:502});
  return data;
 }
 
@@ -53,9 +53,9 @@ export async function customerOrders(request,env,access,{fetcher,siteHandler}){
   const publicRequest=new Request(env.SITE_ORIGIN+'/api/scene');
   const [record,sceneResponse]=await Promise.all([db('read',commandId),siteHandler(publicRequest,env,null)]);
   if(record.duplicate)return json({orders:orderState(record),outcome:null,duplicate:true});
-  if(!sceneResponse.ok)return json({message:'仮想レートを取得できませんでした。'},503);
+  if(!sceneResponse.ok)return json({message:'レートを取得できませんでした。'},503);
   const scene=await sceneResponse.json();
-  if(!validateScene(scene)||!Number.isSafeInteger(scene.version))return json({message:'仮想レートを確認できませんでした。'},503);
+  if(!validateScene(scene)||!Number.isSafeInteger(scene.version))return json({message:'レートを確認できませんでした。'},503);
 
   const snapshot=orderState(record),time=Date.now();
   const hasExposure=snapshot.positions.some(position=>!position.close)||snapshot.pending.some(order=>order.status==='pending');

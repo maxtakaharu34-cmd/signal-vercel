@@ -46,7 +46,7 @@ export function createPaperOrderStore(window) {
    const complete = value => {result = value;};
    const abort = error => {failure = error;tx.abort();};
    tx.oncomplete = () => resolve(result);
-   tx.onabort = () => reject(failure ?? tx.error ?? Error('仮想注文を保存できませんでした。'));
+   tx.onabort = () => reject(failure ?? tx.error ?? Error('注文を保存できませんでした。'));
    operation(tx, complete, abort);
   });
  }

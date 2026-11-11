@@ -33,7 +33,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   void store.match(scene,Date.now()).then(async outcome=>{
    if (destroyed || (!outcome.filled && !outcome.review && !outcome.liquidated)) return;
    if (outcome.liquidated) notify(outcome.liquidated+'件の建玉をロスカットしました。');
-   else if (outcome.filled) notify(outcome.filled+'件の仮想注文が約定しました。');
+   else if (outcome.filled) notify(outcome.filled+'件の注文が約定しました。');
    channel?.postMessage('changed');
    await refresh();
   }).catch(()=>{
@@ -103,9 +103,9 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    const below=(action.side==='buy')===(type==='limit');
    set('orderTargetHelp','現在の'+(action.side==='buy'?'買値':'売値')+'より'+(below?'低い':'高い')+'レートを指定');
   }
-  let note='注文を受け付けた時点の仮想レートで約定します。';
-  if(conditional)note='条件を満たした仮想レートで約定します。'+(store.remote?'口座の同期時に照合します。':'このブラウザーの価格同期時に照合します。');
-  set('orderNote',note);
+  let note='注文受付時点のレートで処理します。';
+  if(conditional)note='条件を満たしたレートで処理します。'+(store.remote?'口座の同期時に照合します。':'このブラウザーの価格同期時に照合します。');
+  set('orderNote',note+'実際の売買は行われません。');
   $('orderError').hidden=true;
   updateQuote();
  }
@@ -117,7 +117,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   $('orderInstrument').textContent=instrumentInfo(instrument).label;
   target.step=String(10**-instrumentInfo(instrument).digits);
   target.min=target.step;
-  $('orderDialogTitle').textContent = position ? '仮想決済' : pending ? '仮想注文の変更' : '仮想注文';
+  $('orderDialogTitle').textContent = position ? '決済' : pending ? '注文の変更' : '注文';
   $('orderDirection').textContent = ORDER_LABELS[side];
   $('orderDirection').dataset.side = side;
   $('orderRateType').textContent = side === 'buy' ? '買値（Ask）' : '売値（Bid）';
@@ -178,7 +178,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
     try{
      if(!orderStore.remote&&getQuote())await orderStore.match(getScene(),Date.now());
      await orderStore.cancel(order.id);
-     notify('仮想注文を取り消しました。');
+     notify('注文を取り消しました。');
      channel?.postMessage('changed');
     }catch(error){notify(error.message);}
     await refresh();
@@ -241,7 +241,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    render(orders);
   } catch {
    if (destroyed || id !== readId) return;
-   set('ordersStatus',store.remote?'口座を同期できませんでした。接続を確認してください。':'このブラウザーで仮想注文の保存領域を開けません。');
+   set('ordersStatus',store.remote?'口座を同期できませんでした。接続を確認してください。':'このブラウザーで注文の保存領域を開けません。');
    $('ordersStatus').hidden = false;
   }
  }

@@ -10,7 +10,7 @@ async function api(window,path,body){
   ...(body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),
  });
  const data=await response.json();
- if(!response.ok)throw Object.assign(Error(data.message??'仮想口座との接続を確認してください。'),{status:response.status,code:data.code});
+ if(!response.ok)throw Object.assign(Error(data.message??'口座との接続を確認してください。'),{status:response.status,code:data.code});
  return data;
 }
 
@@ -199,14 +199,14 @@ export function mountCustomerAccount({document,window,orderPanel,onSession=()=>{
    const result=await api(window,'mfa/verify',{code:mfaCode.value});
    render(result);
    if(dialog.open)dialog.close();
-   byId('customerOrderStatus').textContent='仮想口座にログインしました。';
+   byId('customerOrderStatus').textContent='口座にログインしました。';
   });
  };
  byId('customerLogout').onclick=()=>void action(async()=>{
   await api(window,'logout',{});
   render({enabled:true,state:'guest'});
   dialog.close();
-  byId('customerOrderStatus').textContent='仮想口座からログアウトしました。';
+  byId('customerOrderStatus').textContent='口座からログアウトしました。';
  });
 
  void status().then(result=>{

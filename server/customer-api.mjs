@@ -11,7 +11,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cookie=(name,value,age,lax=false)=>`${name}=${value}; Path=/; HttpOnly; Secure; SameSite=${lax?'Lax':'Strict'}; Max-Age=${age}`;
 const secureUser=user=>uuid.test(user?.id??'')&&user.email_confirmed_at&&!user.is_anonymous;
 const verifiedFactors=user=>(user?.factors??[]).filter(factor=>factor.factor_type==='totp'&&factor.status==='verified'&&uuid.test(factor.id));
-const needSignIn=()=>json({code:'SIGN_IN_REQUIRED',message:'仮想口座にログインしてください。'},401);
+const needSignIn=()=>json({code:'SIGN_IN_REQUIRED',message:'口座にログインしてください。'},401);
 
 function verifiedAssurance(session,user){
  // Only decode a token that /auth/v1/user has accepted for this request.
@@ -42,7 +42,7 @@ function status(session,user){
 export async function customerRoutes(request,env,{fetcher,siteHandler}){
  const url=new URL(request.url),path=url.pathname,post=request.method==='POST';
  if(env.CUSTOMER_AUTH_ENABLED!=='true'){
-  return path==='/api/customer/session'&&!post?json({enabled:false,state:'guest'}):json({message:'仮想口座のログインは準備中です。'},503);
+  return path==='/api/customer/session'&&!post?json({enabled:false,state:'guest'}):json({message:'口座のログインは準備中です。'},503);
  }
  const call=(path,method,body,token)=>auth(env,path,method,body,token,fetcher);
  if(path==='/api/customer/email'&&post){
