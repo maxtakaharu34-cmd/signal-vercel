@@ -1,5 +1,6 @@
 import {validAutomation,signalDiagnostics,signalHistory,simulationTimestamp,signalTimestamp} from './timeline.mjs';
 import {SIGNAL_PERIOD} from './market-bars.mjs';
+import {quotePair,QUOTE_LABELS} from './market-quotes.mjs';
 import {marketContext} from './market-context.mjs';
 import {quoteChange} from './presentation.mjs';
 import {metrics} from './lib/analytics.mjs';
@@ -59,27 +60,44 @@ function renderAnalysis(document,record,rows){
   else $('signalBreakdown').textContent='管理者による手動設定です。自動算出の内訳はありません。';
  }
 }
-export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null,marketView=null}={}){
- const $=id=>document.getElementById(id),set=(id,value)=>{const e=$(id);if(e)e.textContent=value};
- const {checkpoint,signal}=record,rows=marketView?.rows??checkpoint.rows;
+export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null,marketView=null,chartRows=null,side='mid'}={}){
+ const $=id=>document.getElementById(id),set=(id,value)=>{const e=$(id);if(e&&e.textContent!==String(value))e.textContent=value};
+ const {checkpoint,signal}=record,rows=chartRows??marketView?.rows??checkpoint.rows;
  if($('chartArea'))$('chartArea').dataset.study=study;const chartElement=externalChart?$('tradeChart'):$('chart'),rect=chartElement?.getBoundingClientRect(),width=Math.max(240,Math.round(rect?.width||960)),height=Math.max(116,Math.round(rect?.height||380)),visibleCount=Math.min(maxBars??(width<600?36:72),rows.length);
  const data=rows.slice(-visibleCount),last=rows.at(-1),change=quoteChange(rows,{base:changeBase,count:visibleCount}),calc=metrics(rows),level=LEVELS.indexOf(signal.level);
  const timestamp=time=>barTimestamp(checkpoint,time,marketView);
  const periodLabel=marketView?.period===60?'1分足':marketView?marketView.period+'秒足':null;
- set('analysisPeriod',periodLabel??'仮想OHLCから算出');
- set('historyPeriod',(periodLabel?periodLabel+' · ':'')+'直近10本 · 新しい順');
+ const rateLabel=QUOTE_LABELS[side];
+ const labels=[periodLabel,$('chartRate')?rateLabel:null].filter(Boolean);
+ set('analysisPeriod',labels.join(' · ')||'仮想OHLCから算出');
+ set('historyPeriod',[...labels,'直近10本','新しい順'].join(' · '));
  renderAnalysis(document,record,rows);
  const running=validAutomation(checkpoint.automation);set('settingModel',running?(checkpoint.automation.priceModel===2?'不規則な値動き':'周期モデル（旧）'):'手動');set('settingRunState',running?'自動生成中':'手動／停止');set('generatedAt',running&&record.clock?.generatedAt?time(record.clock.generatedAt):'—');
  const card=$('signalCard');if(card){const tag=card.querySelector('.small-tag'),source=card.querySelector('.signal-source');if(tag)tag.textContent=running?'価格から判定':'管理者設定';if(source)source.textContent=running?signal.note.split('。')[0]+' · 仮想価格の変化から判定':'管理者が設定した仮想シナリオ'}
  const mobileSource=document.querySelector('.signal-bar-label');if(mobileSource)mobileSource.textContent=running?signal.note.split('。')[0]:'手動設定';
- const formattedPrice = number(last.close);
- if ($('mobileQuote')) {
-  renderViewerQuote($('quote'), formattedPrice);
-  renderViewerQuote($('mobileQuote'), formattedPrice);
- } else {
-  set('quote', formattedPrice);
+ const center=checkpoint.rows.at(-1).close;
+ set('quote',number(center));
+ if ($('chartRate')) {
+  const rates=quotePair(center);
+  for(const price of document.querySelectorAll('[data-quote]')){
+   const value=number(rates[price.dataset.quote]);
+   if(price.dataset.quote==='spread'){if(price.textContent!==value)price.textContent=value;}
+   else renderViewerQuote(price,value);
+  }
+  for(const button of document.querySelectorAll('[data-price-side]'))button.setAttribute('aria-pressed',String(button.dataset.priceSide===side));
+  if($('chartRate').value!==side)$('chartRate').value=side;
+  for(const id of ['desktopRateBasis','mobileRateBasis','chartRateCompact'])set(id,rateLabel);
+  set('mobileQuote',number(center));
+  for(const id of ['quote','mobileQuote'])$(id).hidden=side!=='mid';
  }
- set('landscapeQuote',formattedPrice);set('priceChangeBase',changeBase==='period'?'表示期間の最初の足比':'直前の足比');set('mobileChangeBase',changeBase==='period'?'表示期間比':'直前足比');set('mobilePriceChange',(change>=0?'+':'')+number(change,2)+'%');$('mobilePriceChange')?.setAttribute('data-tone',change>=0?'up':'down');set('priceChange',(change>=0?'+':'')+number(change,2)+'%');$('priceChange')?.setAttribute('data-tone',change>=0?'up':'down');
+ set('priceChangeBase',changeBase==='period'?'表示期間の最初の足比':'直前の足比');
+ set('mobileChangeBase',changeBase==='period'?'表示期間比':'直前足比');
+ const visibleChange=Number(change.toFixed(2)) || 0;
+ const formattedChange=(visibleChange>0?'+':'')+number(visibleChange,2)+'%';
+ for(const id of ['mobilePriceChange','priceChange']){
+  set(id,formattedChange);
+  $(id)?.setAttribute('data-tone',visibleChange>0?'up':visibleChange<0?'down':'neutral');
+ }
  const selectedIndex=externalChart?rows.findIndex(row=>row.time===selectionTime):hover,selectionRows=externalChart?rows:data;if($('previousCandle'))$('previousCandle').disabled=selectedIndex===0;if($('nextCandle'))$('nextCandle').disabled=selectedIndex==null||selectedIndex<0||selectedIndex>=selectionRows.length-1;set('statHigh',number(Math.max(...data.map(c=>c.high))));set('statLow',number(Math.min(...data.map(c=>c.low))));set('statRange',number(Math.max(...data.map(c=>c.high))-Math.min(...data.map(c=>c.low))));set('statCount',String(checkpoint.total));
  const tone=signal.direction>0?'up':signal.direction<0?'down':'neutral',symbol=signal.direction>0?'▲':signal.direction<0?'▼':'―';set('mobileSignalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('mobileSignalDirection')?.setAttribute('data-icon',symbol);$('signalDirection')?.setAttribute('data-icon',symbol);$('mobileSignalBar')?.setAttribute('data-tone',tone);$('landscapeTicker')?.setAttribute('data-tone',tone);$('signalDetailsToggle')?.setAttribute('data-tone',tone);set('landscapeSignal',symbol+' '+(signal.direction===0?'待機':directionLabel(signal.direction))+' · '+signal.level);set('mobileSignalLevel',signal.level+' '+(level+1)+'/6');set('mobileScenario','価格の生成方向：'+directionLabel(checkpoint.config.direction)+(running?' · 自動生成':' · 管理者設定'));const differs=signal.direction!==checkpoint.config.direction;set('signalRelation','価格の生成方向は'+directionLabel(checkpoint.config.direction)+'、表示シグナルは'+(signal.direction===0?'待機':directionLabel(signal.direction))+'です。');if($('signalRelation'))$('signalRelation').hidden=!differs;set('signalCode',directionCode(signal.direction));set('signalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('signalCard')?.setAttribute('data-tone',signal.direction>0?'up':signal.direction<0?'down':'neutral');set('signalLevel',signal.level);set('signalFraction',`${level+1} / 6`);set('signalNote',signal.note);
  document.querySelectorAll('[data-mobile-level]').forEach(e=>{const current=Number(e.dataset.mobileLevel)===level;e.classList.toggle('active',current);e.classList.toggle('passed',Number(e.dataset.mobileLevel)<level);if(current)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current')});

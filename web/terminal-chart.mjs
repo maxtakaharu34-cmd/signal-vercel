@@ -24,8 +24,9 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  if(library===LightweightCharts&&!window.CanvasRenderingContext2D)return null;
  const {createChart,CandlestickSeries,LineSeries,HistogramSeries,ColorType,CrosshairMode,LineStyle}=library;
  let record=null,rows=[],range=null,following=true,selected=null,previousCount=null,previousStudy='none',previousColors=null,lastData=null,destroyed=false,writing=false,period=null;
+ const chartTime=time=>time*(period??1);
  const format=time=>{
-  if(period){const formatter=period===60?minuteFormat:timeFormat;return formatter.format(new Date(Number(time)*period*1000));}
+  if(period){const formatter=period===60?minuteFormat:timeFormat;return formatter.format(new Date(Number(time)*1000));}
   return record?candleTimeLabel(record.checkpoint,Number(time)):'T'+time;
  };
  const chart=createChart(element,{
@@ -73,18 +74,20 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  };
  const onCrosshair=event=>{
   if(writing||destroyed)return;
-  const time=typeof event.time==='number'&&rows.some(row=>row.time===event.time)?event.time:null;
+  const key=typeof event.time==='number'?event.time/(period??1):null;
+  const time=rows.some(row=>row.time===key)?key:null;
   if(time===selected)return;selected=time;onInspect(time);
  };
  chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);chart.subscribeCrosshairMove(onCrosshair);
- function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null}){
+ function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null,chartRows=null}){
   if(destroyed)return;
-  record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=marketView?.rows??next.checkpoint.rows;
+  record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=chartRows??marketView?.rows??next.checkpoint.rows;
   const nextPeriod=marketView?.period??null;
-  const reset=period!==nextPeriod||previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
+  const periodChanged=period!==nextPeriod;
+  const reset=periodChanged||previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
   period=nextPeriod;
   const savedRange=resolveChartWindow(nextRows,{range,following,count,reset});
-  const dataChanged=JSON.stringify(nextRows)!==lastData,studyChanged=study!==previousStudy,colorChanged=colors!==previousColors;
+  const dataChanged=periodChanged||JSON.stringify(nextRows)!==lastData,studyChanged=study!==previousStudy,colorChanged=colors!==previousColors;
   writing=true;
   try{
    const previousSelection=selected;rows=nextRows;selected=rows.some(row=>row.time===selectionTime)?selectionTime:null;
@@ -93,15 +96,16 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
    if(colorChanged){price.applyOptions({upColor:up,downColor:down,wickUpColor:up,wickDownColor:down});previousColors=colors}
    maLine.applyOptions({visible:ma});upper.applyOptions({visible:bands});lower.applyOptions({visible:bands});
    if(dataChanged||studyChanged||colorChanged){
-    price.setData(rows.map(({time,open,high,low,close})=>({time,open,high,low,close})));
+    price.setData(rows.map(({time,open,high,low,close})=>({time:chartTime(time),open,high,low,close})));
     const overlays=metrics(rows).overlays;
-    maLine.setData(rows.map((row,i)=>overlays.sma[i]===null?{time:row.time}:{time:row.time,value:overlays.sma[i]}));
-    for(const [series,key] of [[upper,'upper'],[lower,'lower']])series.setData(rows.map((row,i)=>overlays.bands[i]?{time:row.time,value:overlays.bands[i][key]}:{time:row.time}));
+    maLine.setData(rows.map((row,i)=>overlays.sma[i]===null?{time:chartTime(row.time)}:{time:chartTime(row.time),value:overlays.sma[i]}));
+    for(const [series,key] of [[upper,'upper'],[lower,'lower']])series.setData(rows.map((row,i)=>overlays.bands[i]?{time:chartTime(row.time),value:overlays.bands[i][key]}:{time:chartTime(row.time)}));
     const values=studySeries(rows);
-    if(study==='rsi')studies[0].setData(values.map(row=>row.rsi===null?{time:row.time}:{time:row.time,value:row.rsi}));
-    if(study==='macd')for(const [index,key] of ['histogram','macd','signal'].entries())studies[index].setData(values.map(row=>({time:row.time,value:row[key],...(index===0?{color:row.histogram>=0?up:down}:{})})));
+    if(study==='rsi')studies[0].setData(values.map(row=>row.rsi===null?{time:chartTime(row.time)}:{time:chartTime(row.time),value:row.rsi}));
+    if(study==='macd')for(const [index,key] of ['histogram','macd','signal'].entries())studies[index].setData(values.map(row=>({time:chartTime(row.time),value:row[key],...(index===0?{color:row.histogram>=0?up:down}:{})})));
     lastData=JSON.stringify(rows);
    }
+   if(periodChanged)chart.timeScale().applyOptions({secondsVisible:period!==60,tickMarkMaxCharacterLength:period===60?5:8});
    if(savedRange&&(dataChanged||reset||studyChanged)){
     range=savedRange;if(reset)following=true;
     chart.timeScale().setVisibleLogicalRange({from:range.from-rows[0].time,to:range.to-rows[0].time});
@@ -109,7 +113,7 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
    previousCount=count;
    // Native pointer movement owns its Y position and pane. Only keyboard
    // selection or new data needs a programmatic candle-ID re-anchor.
-   if(selected!==null&&(selected!==previousSelection||dataChanged))chart.setCrosshairPosition(rows.find(row=>row.time===selected).close,selected,price);
+   if(selected!==null&&(selected!==previousSelection||dataChanged))chart.setCrosshairPosition(rows.find(row=>row.time===selected).close,chartTime(selected),price);
    else if(selected===null&&previousSelection!==null)chart.clearCrosshairPosition();
   }finally{writing=false}
   viewport();

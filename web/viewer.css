@@ -12,13 +12,90 @@ body[data-page=viewer] :is(.mono,#history td) {
   font-family:var(--number-font);
   font-variant-numeric:tabular-nums lining-nums;
 }
-body[data-page=viewer] :is(#quote,#mobileQuote) {
-  white-space:nowrap;
-  letter-spacing:0;
+body[data-page=viewer] .viewer-quote-wrap {
+  width:min(340px, 58%);
+  display:grid;
+  gap:3px;
 }
-body[data-page=viewer] .quote-precision {
-  font-size:1.5em;
+body[data-page=viewer] .quote-context {
+  display:flex;
+  justify-content:flex-end;
+  align-items:baseline;
+  gap:5px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.2;
+  white-space:nowrap;
+}
+body[data-page=viewer] .quote-center {color:var(--text);font-size:12px}
+body[data-page=viewer] .quote-strip {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 61px minmax(0,1fr);
+  align-items:stretch;
+  min-width:0;
+}
+body[data-page=viewer] .quote-side {
+  min-width:0;
+  min-height:46px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:1px;
+  padding:1px 3px 2px;
+  background:var(--side-bg);
+  border:0;
+  border-bottom:2px solid transparent;
+  border-radius:0;
+  color:var(--text);
+}
+body[data-page=viewer] .quote-side[data-price-side=bid] {
+  --side:#245d90;
+  --side-bg:#f1f6fb;
+  --side-selected:#e6eff8;
+}
+body[data-page=viewer] .quote-side[data-price-side=ask] {
+  --side:#a13640;
+  --side-bg:#fcf3f3;
+  --side-selected:#f9e7e8;
+}
+body[data-page=viewer] .quote-side[aria-pressed=true] {
+  background:var(--side-selected);
+  border-bottom-color:var(--side);
+}
+body[data-page=viewer] .quote-side:focus-visible {outline-offset:-2px}
+body[data-page=viewer] .quote-side-label {
+  color:var(--side);
+  font-size:10px;
+  font-weight:600;
+  line-height:1.2;
+}
+body[data-page=viewer] .quote-rate {
+  font-size:18px;
+  font-weight:400;
+  line-height:1;
+  white-space:nowrap;
+}
+body[data-page=viewer] .quote-precision {font-size:1.5em;font-weight:500}
+body[data-page=viewer] .quote-spread {
+  display:grid;
+  place-content:center;
+  text-align:center;
+  gap:1px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.2;
+}
+body[data-page=viewer] .quote-spread b {
+  color:var(--text);
+  font-size:13px;
   font-weight:500;
+}
+body[data-page=viewer] .chart-rate-compact {display:none}
+body[data-page=viewer][data-chart-focus=true] .chart-rate-compact {
+  display:inline;
+  color:var(--blue);
+  font-weight:650;
 }
 body[data-page=viewer] #followLatest[aria-pressed=true]+#selectedCandle {
   display:none;
@@ -59,8 +136,8 @@ body[data-page=viewer] .container{max-width:1920px;padding:0 24px 20px;min-width
 body[data-page=viewer] .demo-line{margin:0 0 12px;padding:7px 0;min-height:30px;align-items:center;gap:8px;border:0;background:#fff;font-size:11px;color:var(--muted)}body[data-page=viewer] .demo-line strong{font-size:11px;font-weight:500;color:var(--muted)}body[data-page=viewer] .demo-short{display:none}
 body[data-page=viewer] .terminal-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start;margin:0 0 18px}body[data-page=viewer] .chart-column{display:block;min-width:0}
 body[data-page=viewer] .chart-panel{height:var(--chart-h);min-height:440px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:2px;overflow:hidden}
-body[data-page=viewer] .chart-heading{height:82px;min-height:82px;padding:12px 16px;background:#fff}body[data-page=viewer] .chart-heading h2{font-size:17px;font-weight:650}body[data-page=viewer] .chart-heading .caption{font-size:11px;margin-top:2px}body[data-page=viewer] .chart-heading .subtle{font-size:11px;font-weight:400}
-body[data-page=viewer] .quote-wrap{display:grid;grid-template-columns:auto auto;column-gap:12px;align-items:center;text-align:right}body[data-page=viewer] .quote{grid-row:1/3;font-size:27px;font-weight:400;padding:0;line-height:1}body[data-page=viewer] .change{font-size:12px;margin:0;font-weight:500}body[data-page=viewer] .change-base{font-size:11px;color:var(--muted)}body[data-page=viewer] [data-tone=up].change,body[data-page=viewer] .positive{color:var(--up)}body[data-page=viewer] [data-tone=down].change,body[data-page=viewer] .negative{color:var(--down)}
+body[data-page=viewer] .chart-heading{height:82px;min-height:82px;padding:5px 12px;background:#fff}body[data-page=viewer] .chart-heading h2{font-size:17px;font-weight:650}body[data-page=viewer] .chart-heading .caption{font-size:11px;margin-top:2px}body[data-page=viewer] .chart-heading .subtle{font-size:11px;font-weight:400}
+body[data-page=viewer] .change{font-size:12px;margin:0;font-weight:500}body[data-page=viewer] .change-base{font-size:11px;color:var(--muted)}body[data-page=viewer] [data-tone=up].change,body[data-page=viewer] .positive{color:var(--up)}body[data-page=viewer] [data-tone=down].change,body[data-page=viewer] .negative{color:var(--down)}
 body[data-page=viewer] .chart-tools{height:44px;min-height:44px;padding:0 8px 0 0;flex-wrap:nowrap;justify-content:flex-start;gap:0;background:var(--panel2);border-bottom:1px solid var(--border)}body[data-page=viewer] .chart-range{height:44px;align-self:auto;gap:0;border:0;border-radius:0;background:transparent}body[data-page=viewer] .chart-range>span{font-size:11px;color:var(--muted);padding-inline:12px}
 body[data-page=viewer] .chart-range .tb-btn{height:44px;min-height:44px;min-width:48px;padding:0 9px;border:0;border-inline-end:1px solid var(--border);border-radius:0;background:#fff;color:var(--text);font-size:12px;box-shadow:none}body[data-page=viewer] .chart-range .tb-btn.active{color:var(--blue);background:#e3ebf3;font-weight:650;box-shadow:inset 0 -2px var(--blue)}body[data-page=viewer] .chart-range .tb-btn:before{display:none}
 body[data-page=viewer] .chart-indicator-trigger{min-width:44px;min-height:44px;margin-inline-start:auto;padding:0 8px;color:var(--text);font-size:12px;font-weight:600;gap:7px;max-width:calc(100% - 100px)}body[data-page=viewer] .chart-indicator-trigger small{font-size:11px;font-weight:400;color:var(--muted)}
@@ -116,14 +193,41 @@ body[data-page=viewer] .context-horizons{border-radius:0}body[data-page=viewer] 
 body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:var(--muted)}body[data-page=viewer] .footer .text-link{font-size:11px;min-height:44px}body[data-page=viewer] .button{box-shadow:none;border-radius:2px;min-height:44px}body[data-page=viewer] .sync-notice{margin:8px 0}
 .signal-dialog{padding:0;width:420px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #d9e1e9;border-radius:4px;background:#fff;color:#202d3d}.signal-dialog::backdrop{background:#15283c55}body[data-page=viewer] .signal-dialog .signal-context-group{border:0;border-radius:0}body[data-page=viewer] .signal-dialog .display-menu-heading{position:sticky;top:0;z-index:5;background:#fff}
 .history-actions{display:flex;align-items:center;gap:8px}.mobile-history-toggle,.history-compact-hint{display:none}.step-reference{display:block;font-size:11px;margin-top:2px;color:#8190a2}
-@keyframes quote-tick{0%{background:var(--flash)}100%{background:transparent}}body[data-page=viewer] .quote-flash[data-flash=up]{--flash:var(--up-bg)}body[data-page=viewer] .quote-flash[data-flash=down]{--flash:var(--down-bg)}body[data-page=viewer] #quote.quote-flash,body[data-page=viewer] #mobileQuote.quote-flash{animation:quote-tick .6s ease-out}
+@keyframes quote-tick{0%{background:var(--flash)}100%{background:transparent}}body[data-page=viewer] .quote-flash[data-flash=up]{--flash:var(--up-bg)}body[data-page=viewer] .quote-flash[data-flash=down]{--flash:var(--down-bg)}body[data-page=viewer] .quote-rate.quote-flash{animation:quote-tick .6s ease-out}
 @media(max-width:1100px) and (min-width:768px){body[data-page=viewer] .classic-header{padding-inline:16px;gap:12px}body[data-page=viewer] .toolbar-link{padding-inline:10px}body[data-page=viewer] .sync-age,body[data-page=viewer] .badge-live,body[data-page=viewer] .display-menu-trigger>span{display:none}body[data-page=viewer] .container{padding-inline:16px}body[data-page=viewer] .terminal-layout{grid-template-columns:minmax(0,1fr) 270px;gap:12px}body[data-page=viewer] .chart-range-status{display:none}}
 @media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
- body[data-page=viewer]{--header-h:calc(44px + env(safe-area-inset-top));--quote-h:68px;--dock-h:calc(56px + env(safe-area-inset-bottom));background:#fff}
+ body[data-page=viewer]{--header-h:calc(44px + env(safe-area-inset-top));--quote-h:81px;--dock-h:calc(56px + env(safe-area-inset-bottom));background:#fff}
  body[data-page=viewer] .classic-header{position:sticky;top:0;height:var(--header-h);min-height:var(--header-h);padding:env(safe-area-inset-top) 12px 0;gap:8px}body[data-page=viewer] .header-left,body[data-page=viewer] .header-right{gap:8px;flex-wrap:nowrap;width:auto}body[data-page=viewer] .header-right{margin-left:auto}body[data-page=viewer] .logo{font-size:17px;letter-spacing:-.5px}
  body[data-page=viewer] .badge-live,body[data-page=viewer] .header-pair,body[data-page=viewer] .classic-toolbar,body[data-page=viewer] .sync-age{display:none}body[data-page=viewer] .connection{font-size:11px;gap:5px;max-width:112px}body[data-page=viewer] #connectionLabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}body[data-page=viewer] .display-menu-trigger{min-width:44px;height:44px;min-height:44px;padding:12px}body[data-page=viewer] .display-menu-trigger>span{display:none}
- body[data-page=viewer] .signal-bar{position:static;display:grid;height:var(--quote-h);padding:6px 14px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:1fr;gap:12px;border:0;border-bottom:1px solid var(--border);background:#fff;align-items:center}body[data-page=viewer] .mobile-instrument{display:grid;gap:2px;min-width:0;padding:0}body[data-page=viewer] .mobile-instrument strong{font-size:16px;font-weight:650;letter-spacing:0}body[data-page=viewer] .mobile-instrument span{font-size:11px;color:var(--muted);white-space:nowrap}
- body[data-page=viewer] .signal-bar-price{display:grid;grid-column:2;grid-row:1;justify-items:end;gap:1px;line-height:1.2}body[data-page=viewer] .mobile-price-caption{display:none}body[data-page=viewer] #mobileQuote{font-size:25px;font-weight:400;line-height:1;padding:0}body[data-page=viewer] .mobile-change{display:flex;gap:6px;align-items:center}body[data-page=viewer] #mobilePriceChange{font-size:12px;font-weight:500}body[data-page=viewer] #mobileChangeBase{font-size:11px;color:var(--muted)}body[data-page=viewer] #mobilePriceChange[data-tone=up]{color:var(--up)}body[data-page=viewer] #mobilePriceChange[data-tone=down]{color:var(--down)}
+ body[data-page=viewer] .signal-bar {
+  position:static;
+  display:grid;
+  height:var(--quote-h);
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:26px 1fr;
+  gap:0;
+  align-items:center;
+  padding:0;
+  border:0;
+  border-bottom:1px solid var(--border);
+  background:#fff;
+ }
+ body[data-page=viewer] .mobile-instrument {
+  display:flex;
+  align-items:baseline;
+  gap:5px;
+  min-width:0;
+  padding-inline-start:10px;
+  white-space:nowrap;
+ }
+ body[data-page=viewer] .mobile-instrument strong {font-size:13px;font-weight:650}
+ body[data-page=viewer] .mobile-instrument span {font-size:10px;color:var(--muted)}
+ body[data-page=viewer] .mobile-change {padding-inline:3px 10px}
+ body[data-page=viewer] .signal-bar .quote-strip {grid-column:1/-1;align-self:stretch}
+ body[data-page=viewer] .signal-bar .quote-rate {font-size:19px}
+ body[data-page=viewer] #mobilePriceChange {font-size:11px;font-weight:500}
+ body[data-page=viewer] #mobilePriceChange[data-tone=up] {color:var(--up)}
+ body[data-page=viewer] #mobilePriceChange[data-tone=down] {color:var(--down)}
  body[data-page=viewer] .container{padding:0 0 var(--dock-h);max-width:none}body[data-page=viewer][data-view=chart] .container{height:calc(100dvh - var(--header-h) - var(--quote-h) - var(--dock-h));min-height:360px;padding:0}body[data-page=viewer] .demo-line{display:none}
  body[data-page=viewer] .terminal-layout{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) 44px;align-items:stretch;gap:0;height:100%;margin:0;min-height:0}body[data-page=viewer] .chart-column{grid-row:1;min-height:0;display:flex;flex-direction:column;gap:0}body[data-page=viewer] .chart-panel{height:100%;min-height:0;flex:1;border:0;border-radius:0}body[data-page=viewer] .chart-heading{display:none}body[data-page=viewer] .chart-tools{padding:0 8px 0 0;flex-shrink:0}body[data-page=viewer] .chart-range>span{display:none}body[data-page=viewer] .chart-range .tb-btn{min-width:56px}body[data-page=viewer] .chart-indicator-trigger{font-size:12px;padding-inline:6px}
  body[data-page=viewer] .ohlc {grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -146,8 +250,8 @@ body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:va
  body[data-page=viewer] .signal-dialog #signalCard .signal-main{display:grid}body[data-page=viewer] .signal-dialog #signalCard .panel-heading{display:flex}body[data-page=viewer] .signal-dialog .signal-detail-content{display:contents}
  body[data-page=viewer][data-chart-focus=true]{overflow:hidden}body[data-page=viewer][data-chart-focus=true] #chartArea{position:fixed;inset:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);height:auto;min-height:0;z-index:100;border:0;border-radius:0;background:#fff;box-shadow:0 0 0 100vmax #fff}body[data-page=viewer][data-chart-focus=true] .chart-body{flex:1;min-height:0}
 }
-@media(max-width:350px){body[data-page=viewer] .signal-bar{padding-inline:12px;gap:8px}body[data-page=viewer] #mobileQuote{font-size:22px}body[data-page=viewer] .signal-bar-label{display:none}body[data-page=viewer] .chart-indicator-trigger small{max-width:112px}}
-@media(orientation:landscape) and (max-height:500px) and (max-width:1000px){body[data-page=viewer] .signal-bar{display:none}body[data-page=viewer] .landscape-ticker{display:flex;align-items:center;gap:10px;margin-left:auto;min-width:0}body[data-page=viewer] .landscape-ticker strong{font-size:22px;font-weight:500;letter-spacing:-.7px}body[data-page=viewer] .landscape-ticker span{font-size:11px;white-space:nowrap;color:var(--context-direction)}body[data-page=viewer] .landscape-price-label,body[data-page=viewer] .header-right .connection{display:none}body[data-page=viewer][data-view=chart] .container{height:calc(100dvh - var(--header-h) - var(--dock-h));min-height:250px}body[data-page=viewer] .terminal-layout{grid-template-rows:minmax(0,1fr) 44px}body[data-page=viewer] .data-workspace [role=tabpanel]{min-height:220px}}
+@media(max-width:350px){body[data-page=viewer] .mobile-instrument span{font-size:9px}body[data-page=viewer] .mobile-instrument strong{font-size:12px}body[data-page=viewer] .signal-bar-label{display:none}body[data-page=viewer] .chart-indicator-trigger small{max-width:112px}}
+@media(orientation:landscape) and (max-height:500px) and (max-width:1000px){body[data-page=viewer] .signal-bar{display:none}body[data-page=viewer] .landscape-ticker{display:flex;align-items:center;gap:10px;margin-left:auto;min-width:0}body[data-page=viewer] .landscape-price-label,body[data-page=viewer] .header-right .connection{display:none}body[data-page=viewer][data-view=chart] .container{height:calc(100dvh - var(--header-h) - var(--dock-h));min-height:250px}body[data-page=viewer] .terminal-layout{grid-template-rows:minmax(0,1fr) 44px}body[data-page=viewer] .data-workspace [role=tabpanel]{min-height:220px}}
 @media(prefers-reduced-motion:reduce){body[data-page=viewer] .quote-flash{animation:none!important}}
 
 body[data-page=viewer]:has(dialog[open]){overflow:hidden}
@@ -165,3 +269,16 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
 
 @media(orientation:landscape) and (max-height:500px) and (max-width:1000px){body[data-page=viewer][data-view=chart] .container{min-height:0}}
 @media(orientation:landscape) and (max-height:360px) and (max-width:1000px){body[data-page=viewer]:not([data-chart-focus=true]) .ohlc{display:none}}
+
+@media(orientation:landscape) and (max-height:500px) and (max-width:1000px){
+ body[data-page=viewer] .landscape-ticker .quote-strip {
+  grid-template-columns:minmax(76px,1fr) 54px minmax(76px,1fr);
+ }
+ body[data-page=viewer] .landscape-ticker .quote-side {min-height:44px}
+ body[data-page=viewer] .landscape-ticker .quote-rate {font-size:13px}
+ body[data-page=viewer] .landscape-ticker .quote-spread b {font-size:11px}
+ body[data-page=viewer] .chart-rate-compact {display:inline;color:var(--blue);font-weight:650}
+}
+@media(max-width:350px){
+ body[data-page=viewer][data-chart-focus=true] .chart-indicator-label {display:none}
+}

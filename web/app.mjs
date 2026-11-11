@@ -1,6 +1,7 @@
 import {createTerminalChart} from './terminal-chart.mjs';
 import {validAutomation,newerFrame,createMarketBarReader} from './timeline.mjs';
 import {CHART_PERIODS,marketClock} from './market-bars.mjs';
+import {QUOTE_SIDES,quoteCandles} from './market-quotes.mjs';
 import {createSiteClient} from './site-client.mjs';
 import {createEngine,initialCheckpoint,DEFAULT_SIGNAL,validateScene} from './engine.mjs';
 import {renderScene,renderEvents,chartHitIndex,barTimestamp} from './render.mjs';
@@ -16,7 +17,9 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  let automationDraft=null,chartFocused=false,ownerEmailPending='',ownerCooldownUntil=0,ownerSending=false,ownerAuthMethod='code';
  const readMarketBars = createMarketBarReader();
  let marketView = null;
- const displayRows = () => marketView?.rows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
+ let chartRows = null;
+ let chartFrame = null;
+ const displayRows = () => chartRows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
  const savePreferences=()=>saveDisplayPreferences(window,{...preferences,maxBars,changeBase,ma,bands,study});
  if(!adminPage){document.documentElement.dataset.colors=preferences.colors;if($('colorConvention'))$('colorConvention').value=preferences.colors;if($('changeBase'))$('changeBase').value=changeBase;if($('showMa'))$('showMa').checked=ma;if($('showBands'))$('showBands').checked=bands;if($('chartStudy'))$('chartStudy').value=study;}
  const setText=(id,value)=>{const element=$(id);if(element&&element.textContent!==String(value))element.textContent=value};
@@ -54,22 +57,46 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    const {checkpoint} = record;
    const periodPicker = $('chartPeriod');
    if (periodPicker) {
-    const clock = marketClock(checkpoint);
     const period = preferences.period;
-    const lastStep = checkpoint.rows.at(-1).time;
-    const hasPeriods = !!clock && lastStep >= clock.since;
-    periodPicker.hidden = !hasPeriods;
-    if (periodPicker.value !== String(period)) periodPicker.value = String(period);
-    const rows = hasPeriods ? readMarketBars(checkpoint, period) : [];
-    const running = validAutomation(checkpoint.automation);
-    const remainder = ((clock?.epoch ?? 0) + lastStep) % period;
-    marketView = rows.length ? {rows, period, running, remaining:remainder ? period - remainder : 0} : null;
+    if(chartFrame?.checkpoint!==checkpoint||chartFrame.period!==period){
+     const clock = marketClock(checkpoint);
+     const lastStep = checkpoint.rows.at(-1).time;
+     const hasPeriods = !!clock && lastStep >= clock.since;
+     periodPicker.hidden = !hasPeriods;
+     if (periodPicker.value !== String(period)) periodPicker.value = String(period);
+     const rows = hasPeriods ? readMarketBars(checkpoint, period) : [];
+     const running = validAutomation(checkpoint.automation);
+     const remainder = ((clock?.epoch ?? 0) + lastStep) % period;
+     marketView = rows.length ? {rows, period, running, remaining:remainder ? period - remainder : 0} : null;
+     chartFrame={checkpoint,period};
+    }
+    if(chartFrame.side!==preferences.side){
+     chartRows = quoteCandles(marketView?.rows ?? checkpoint.rows, preferences.side);
+     chartFrame.side=preferences.side;
+    }
    }
    if(selectedTime!==null){const width=$('chart')?.getBoundingClientRect().width||960,rows=displayRows(),visible=chartController?rows:rows.slice(-(maxBars??(width<600?36:72))),index=visible.findIndex(row=>row.time===selectedTime);hover=index>=0?index:null;if(index<0)selectedTime=null;}
-   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView});
-   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView});
-  }else if(!adminPage){marketView=null;$('chartPeriod').hidden=true;for(const id of ['quote','mobileQuote','mobilePriceChange','landscapeQuote','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通のシミュレーション価格を取得しています');}
-if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(flash&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.clearTimeout(flashTimer);for(const id of ['quote','mobileQuote','chartArea']){const el=$(id);if(!el)continue;el.classList.remove('quote-flash');el.dataset.flash=flash;void el.offsetWidth;el.classList.add('quote-flash')}flashTimer=window.setTimeout(()=>{for(const id of ['quote','mobileQuote','chartArea'])$(id)?.classList.remove('quote-flash')},600)}}renderBarPresets();}
+   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView,chartRows,side:preferences.side});
+   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView,chartRows});
+  }else if(!adminPage){
+   marketView=null;chartRows=null;chartFrame=null;$('chartPeriod').hidden=true;
+   for(const id of ['quote','mobileQuote','mobilePriceChange','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');
+   document.querySelectorAll('[data-quote]').forEach(element=>{element.textContent='—'});
+   setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通のシミュレーション価格を取得しています');
+  }
+  if(!adminPage&&ready){
+   const flash=priceStreak(record.checkpoint.rows.at(-1));
+   if(flash&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    window.clearTimeout(flashTimer);
+    const rates=document.querySelectorAll('.quote-rate');
+    rates.forEach(el=>el.classList.remove('quote-flash'));
+    void $('chartArea').offsetWidth;
+    rates.forEach(el=>{el.dataset.flash=flash;el.classList.add('quote-flash')});
+    flashTimer=window.setTimeout(()=>rates.forEach(el=>el.classList.remove('quote-flash')),600);
+   }
+  }
+  renderBarPresets();
+ }
  function renderBarPresets(range=chartController?.state?.().range){const preset=maxBars??Number($('chart')?.dataset.count),activeBars=range&&Math.abs(range.to-range.from-preset-1)>.5?null:preset;document.querySelectorAll('[data-viewbars]').forEach(e=>{const selected=Number(e.dataset.viewbars)===activeBars;e.classList.toggle('active',selected);e.setAttribute('aria-pressed',String(selected))});}
  function fillControls(){if(!adminPage)return;const config=engine.snapshot().config;const auto=automationDraft||config;if(!automationDraft)setText('automationSettingsHint','自動更新中に調整できます。反映前の足は変更しません。');if($('autoSpeed'))$('autoSpeed').value=String(auto.speed);if($('autoVolatility'))$('autoVolatility').value=String(auto.volatility);setText('autoVolatilityOutput',auto.volatility+' / 10');document.querySelectorAll('[data-dir]').forEach(e=>e.setAttribute('aria-pressed',String(Number(e.dataset.dir)===config.direction)));$('volatility').value=String(config.volatility);setText('volatilityOutput',config.volatility+' / 10');$('speed').value=String(config.speed);$('editSignalDirection').value=String(signal.direction);$('editSignalLevel').value=signal.level;$('editSignalNote').value=signal.note;$('announcementInput').value=announcement;}
  function applyRecord(record,{preserveAutomationDraft=false}={}){if(!preserveAutomationDraft)automationDraft=null;if(!validateScene(record)||!Number.isSafeInteger(record.version)||record.version<1)throw Error('保存データの形式を確認してください。');published=record;engine=createEngine(record.checkpoint);signal={...record.signal};announcement=record.announcement;dirty=false;conflict=false;hover=null;stop();markRead();fillControls();paint();}
@@ -139,15 +166,17 @@ if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(
  const escapeChart=event=>{if(event.key==='Escape'&&chartFocused){setChartFocus(false);$('chartFocus')?.focus()}};document.addEventListener('keydown',escapeChart);
  if($('historyColumns'))$('historyColumns').onclick=()=>{const button=$('historyColumns'),full=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(full));button.textContent=full?'簡易表示に戻す':'4本値を表示';document.body.dataset.historyFull=String(full)};
  if($('export'))$('export').onclick=()=>{
-  const record=adminPage?draft():published,rows=marketView?.rows??record.checkpoint.rows;
-  const heading=marketView?'bar_start_utc,open,high,low,close,status':'step,open,high,low,close';
+  const record=adminPage?draft():published,rows=displayRows();
+  const prefix=marketView?'bar_start_utc':'step';
+  const heading=[prefix,'open','high','low','close',...(marketView?['status']:[]),...(!adminPage?['quote_side']:[])].join(',');
   const values=rows.map((row,index)=>{
    const quote=[row.open,row.high,row.low,row.close];
-   if(!marketView)return [row.time,...quote].join(',');
+   const side=adminPage?[]:[preferences.side];
+   if(!marketView)return [row.time,...quote,...side].join(',');
    const status=index!==rows.length-1||!marketView.remaining?'closed':marketView.running?'forming':'stopped';
-   return [barTimestamp(record.checkpoint,row.time,marketView),...quote,status].join(',');
+   return [barTimestamp(record.checkpoint,row.time,marketView),...quote,status,...side].join(',');
   });
-  const filename=marketView?'signal-desk-demo-'+marketView.period+'s.csv':'signal-desk-demo.csv';
+  const filename=['signal-desk-demo',marketView?marketView.period+'s':null,adminPage?null:preferences.side].filter(Boolean).join('-')+'.csv';
   saveDownload(window,document,[heading,...values].join('\n'),filename,'text/csv;charset=utf-8');
   toast('デモ指数のCSVを保存しました');
  };
@@ -175,6 +204,14 @@ if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(
   chartController?.follow();
   paint();
  };
+ function selectRate(side) {
+  if (!QUOTE_SIDES.includes(side) || preferences.side === side) return;
+  preferences.side = side;
+  savePreferences();
+  paint();
+ }
+ document.querySelectorAll('[data-price-side]').forEach(button=>button.onclick=()=>selectRate(button.dataset.priceSide));
+ if ($('chartRate')) $('chartRate').onchange = event => selectRate(event.target.value);
  const closeMenu=event=>{const menu=$('displayMenu');if(menu&&event.target===menu){const r=menu.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)menu.close()}};document.addEventListener('click',closeMenu);
  if($('displayMenuOpen'))$('displayMenuOpen').onclick=()=>$('displayMenu').showModal();
  if($('displayMenuClose'))$('displayMenuClose').onclick=()=>$('displayMenu').close();

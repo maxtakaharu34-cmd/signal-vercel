@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {Window} from 'happy-dom';
 import {mountApp} from '../web/app.mjs';
 import {initialCheckpoint,DEFAULT_SIGNAL} from '../web/engine.mjs';
+import {quoteCandles,quotePair} from '../web/market-quotes.mjs';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function boot({page='viewer',signed=true,admin=false,mfa=false,offline=false,chartWidth=960,chartHeight=380,chartFactory}={}){
  const window=new Window({url:'https://example.test/'+(page==='admin'?'admin/':''),settings:{disableJavaScriptEvaluation:true,disableCSSFileLoading:true,disableJavaScriptFileLoading:true}});
@@ -16,10 +17,37 @@ async function boot({page='viewer',signed=true,admin=false,mfa=false,offline=fal
  return {window,document:window.document,app,resizeChart(width,height){chartSize={width,height,left:0};window.dispatchEvent(new window.Event('resize'))},get publishCalls(){return publishCalls},holdPublish(){let release;publishHold=new Promise(r=>release=r);return ()=>{publishHold=null;release()}},reject(error){rejectPublish=error},async publish(){window.document.getElementById('publish').click();await tick();await tick()},remote(value){record={...record,...value};remote({new:structuredClone(record)})},auth(next){authListener('SIGNED_OUT',next)},async close(){app.destroy();await window.happyDOM.close()}};
 }
 test('viewer contains the chart, six-level signal and no scenario editing controls',async()=>{const a=await boot();try{assert.equal(a.document.querySelectorAll('[data-dir]').length,0);assert.equal(a.document.querySelectorAll('[data-level-bar]').length,6);assert.equal(a.document.getElementById('signalCode').textContent,'WAIT');assert.match(a.document.getElementById('chart').innerHTML,/<rect/);assert.equal(a.document.getElementById('candleRows').children.length,10)}finally{await a.close()}});
+test('quote controls change the chart, history and inspection together without changing the shared scene',async()=>{
+ const a=await boot();
+ try{
+  const get=id=>a.document.getElementById(id),record=a.app.state().published;
+  const close=record.checkpoint.rows.at(-1).close,quotes=quotePair(close);
+  assert.equal(get('rate-mobile-bid').textContent,quotes.bid.toFixed(3));
+  assert.equal(get('rate-mobile-ask').textContent,quotes.ask.toFixed(3));
+  assert.equal(a.document.querySelector('[data-quote=spread]').textContent,'0.006');
+  assert.equal(get('ohlc-close').textContent,quotes.bid.toFixed(3));
+  const ask=a.document.querySelector('[data-price-side=ask]');
+  ask.click();
+  assert.equal(ask.getAttribute('aria-pressed'),'true');
+  assert.equal(get('chartRate').value,'ask');
+  assert.equal(get('ohlc-close').textContent,quotes.ask.toFixed(3));
+  assert.equal(get('candleRows').firstElementChild.children[4].textContent,quotes.ask.toFixed(3));
+  assert.match(get('historyPeriod').textContent,/Ask/);
+  get('previousCandle').click();
+  const previous=record.checkpoint.rows.at(-2);
+  assert.equal(get('ohlc-close').textContent,quotePair(previous.close).ask.toFixed(3));
+  get('chartRate').value='mid';
+  get('chartRate').dispatchEvent(new a.window.Event('change'));
+  assert.equal(get('ohlc-close').textContent,previous.close.toFixed(3));
+  assert.equal(get('mobileQuote').hidden,false);
+  assert.deepEqual(a.app.state().published,record);
+  assert.equal(a.publishCalls,0);
+ }finally{await a.close()}
+});
 test('candle navigation selects adjacent data, clamps at the edge and returns to following without publishing',async()=>{const a=await boot({chartWidth:375});try{
  const get=id=>a.document.getElementById(id),rows=a.app.state().published.checkpoint.rows;
- assert.equal(get('nextCandle').disabled,true);get('previousCandle').click();assert.equal(get('selectedCandle').textContent,'T'+rows.at(-2).time);assert.equal(get('ohlc-close').textContent,rows.at(-2).close.toFixed(3));assert.equal(get('nextCandle').disabled,false);
- get('nextCandle').click();assert.equal(get('ohlc-close').textContent,rows.at(-1).close.toFixed(3));assert.equal(get('nextCandle').disabled,true);
+ assert.equal(get('nextCandle').disabled,true);get('previousCandle').click();assert.equal(get('selectedCandle').textContent,'T'+rows.at(-2).time);assert.equal(get('ohlc-close').textContent,quotePair(rows.at(-2).close).bid.toFixed(3));assert.equal(get('nextCandle').disabled,false);
+ get('nextCandle').click();assert.equal(get('ohlc-close').textContent,quotePair(rows.at(-1).close).bid.toFixed(3));assert.equal(get('nextCandle').disabled,true);
  for(let i=0;i<50;i++)get('previousCandle').click();assert.equal(get('previousCandle').disabled,true);assert.equal(get('selectedCandle').textContent,'T'+rows.at(-36).time);
  get('followLatest').click();assert.equal(get('selectedCandle').textContent,'最新');assert.equal(get('previousCandle').disabled,false);assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
@@ -53,7 +81,7 @@ test('admin signal inputs keep their options across redraws and publish the sele
 
 test('phone chart selection stays accurate after resizing and explicit candle-count changes',async()=>{const a=await boot({chartWidth:280,chartHeight:280});try{
  const chart=a.document.getElementById('chart');assert.equal(chart.getAttribute('viewBox'),'0 0 280 280');assert.equal(chart.dataset.count,'36');assert.equal(a.document.querySelector('[data-viewbars="36"]').getAttribute('aria-pressed'),'true');
- chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));let open=a.document.getElementById('ohlc-open').textContent;assert.equal(open,a.app.state().published.checkpoint.rows.at(-36).open.toFixed(3));
+ chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));let open=a.document.getElementById('ohlc-open').textContent;assert.equal(open,quotePair(a.app.state().published.checkpoint.rows.at(-36).open).bid.toFixed(3));
  chart.dispatchEvent(new a.window.PointerEvent('pointerdown',{clientX:22,pointerType:'touch',bubbles:true}));assert.equal(a.document.getElementById('ohlc-open').textContent,open);
  a.resizeChart(820,380);await new Promise(r=>setTimeout(r,160));assert.equal(chart.getAttribute('viewBox'),'0 0 820 380');assert.equal(chart.dataset.count,'72');assert.equal(a.document.querySelector('[data-viewbars="72"]').getAttribute('aria-pressed'),'true');
  a.document.querySelector('[data-viewbars="36"]').click();a.resizeChart(300,280);await new Promise(r=>setTimeout(r,160));assert.equal(chart.dataset.count,'36');assert.equal(chart.getAttribute('viewBox'),'0 0 300 280');
@@ -83,7 +111,7 @@ test('quote comparison is explicit, stable when changing the window, and period 
  const before=a.document.getElementById('priceChange').textContent;
  assert.equal(a.document.getElementById('priceChangeBase').textContent,'直前の足比');a.document.querySelector('[data-viewbars="36"]').click();assert.equal(a.document.getElementById('priceChange').textContent,before);
  const selector=a.document.getElementById('changeBase');selector.value='period';selector.dispatchEvent(new a.window.Event('change'));assert.equal(a.document.getElementById('priceChangeBase').textContent,'表示期間の最初の足比');
- const rows=a.app.state().published.checkpoint.rows,value=(rows.at(-1).close/rows.at(-36).open-1)*100;assert.equal(a.document.getElementById('priceChange').textContent,(value>=0?'+':'')+value.toFixed(2)+'%');assert.equal(a.document.getElementById('mobilePriceChange').textContent,a.document.getElementById('priceChange').textContent);assert.equal(a.publishCalls,0);
+ const rows=quoteCandles(a.app.state().published.checkpoint.rows,'bid'),value=(rows.at(-1).close/rows.at(-36).open-1)*100;assert.equal(a.document.getElementById('priceChange').textContent,(value>=0?'+':'')+value.toFixed(2)+'%');assert.equal(a.document.getElementById('mobilePriceChange').textContent,a.document.getElementById('priceChange').textContent);assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
 
 test('six level names identify the selected level and explain independently configured directions',async()=>{const a=await boot();try{
@@ -95,7 +123,7 @@ test('six level names identify the selected level and explain independently conf
 
 test('display colors and candle count persist locally without publishing and touch drag selects candles',async()=>{const a=await boot();try{
  const colors=a.document.getElementById('colorConvention');assert.equal(colors.value,'jp');colors.value='intl';colors.dispatchEvent(new a.window.Event('change'));assert.equal(a.document.documentElement.dataset.colors,'intl');
- a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','ma','maxBars','period','study']);
+ a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','ma','maxBars','period','side','study']);
  const chart=a.document.getElementById('chart');chart.dispatchEvent(new a.window.PointerEvent('pointerdown',{clientX:22,pointerType:'touch',pointerId:1,bubbles:true}));const first=a.document.getElementById('ohlc-open').textContent;chart.dispatchEvent(new a.window.PointerEvent('pointermove',{clientX:300,pointerType:'touch',pointerId:1,bubbles:true}));assert.notEqual(a.document.getElementById('ohlc-open').textContent,first);chart.dispatchEvent(new a.window.PointerEvent('pointerup',{pointerId:1,pointerType:'touch',bubbles:true}));assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
 
@@ -104,7 +132,7 @@ test('inspected candle remains anchored through a live update; latest button and
  assert.match(selected,/^T/);assert.ok(chart.querySelector('.crosshair-horizontal'));
  const old=a.app.state().published.checkpoint,next=structuredClone(old),last=next.rows.at(-1);next.rows.push({time:last.time+1,open:last.close,close:last.close+1,high:last.close+1,low:last.close});next.total++;
  a.remote({version:2,checkpoint:next});await tick();assert.equal(a.document.getElementById('selectedCandle').textContent,selected);assert.equal(a.document.getElementById('ohlc-open').textContent,open);
- a.document.getElementById('followLatest').click();assert.equal(a.document.getElementById('selectedCandle').textContent,'最新');assert.equal(a.document.getElementById('ohlc-open').textContent,last.close.toFixed(3));
+ a.document.getElementById('followLatest').click();assert.equal(a.document.getElementById('selectedCandle').textContent,'最新');assert.equal(a.document.getElementById('ohlc-open').textContent,quotePair(last.close).bid.toFixed(3));
  chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Home',bubbles:true}));chart.dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(a.document.getElementById('selectedCandle').textContent,'最新');assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
 
@@ -114,9 +142,9 @@ test('interactive chart inspection renders retained candles outside the initial 
  try{
   const get=id=>a.document.getElementById(id);assert.equal(a.document.body.dataset.chartEngine,'canvas');assert.equal(get('chart').hidden,true);assert.equal(get('chart').hasAttribute('hidden'),true);assert.equal(get('tradeChart').hidden,false);
   const checkpoint=a.app.state().published.checkpoint,row=checkpoint.rows[4];bridge.onInspect(row.time);
-  assert.equal(get('selectedCandle').textContent,'T'+row.time);assert.equal(get('ohlc-close').textContent,row.close.toFixed(3));assert.equal(frames.at(-1).selectionTime,row.time);
+  assert.equal(get('selectedCandle').textContent,'T'+row.time);assert.equal(get('ohlc-close').textContent,quotePair(row.close).bid.toFixed(3));assert.equal(frames.at(-1).selectionTime,row.time);
   const next=structuredClone(checkpoint),last=next.rows.at(-1);next.rows.push({time:last.time+1,open:last.close,close:last.close+.01,high:last.close+.01,low:last.close});next.total++;
-  a.remote({version:2,checkpoint:next});await tick();assert.equal(frames.at(-1).record.version,2);assert.equal(frames.at(-1).selectionTime,row.time);assert.equal(get('ohlc-close').textContent,row.close.toFixed(3));
+  a.remote({version:2,checkpoint:next});await tick();assert.equal(frames.at(-1).record.version,2);assert.equal(frames.at(-1).selectionTime,row.time);assert.equal(get('ohlc-close').textContent,quotePair(row.close).bid.toFixed(3));
   get('previousCandle').click();assert.equal(frames.at(-1).selectionTime,row.time-1);
   get('tradeChart').dispatchEvent(new a.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert.equal(frames.at(-1).selectionTime,null);assert.equal(following,1);assert.equal(a.publishCalls,0);
  }finally{await a.close()}assert.equal(released,true);
