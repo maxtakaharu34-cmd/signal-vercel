@@ -104,7 +104,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    marketView=null;chartRows=null;chartFrame=null;$('chartPeriod').hidden=true;
    for(const id of ['quote','mobileQuote','mobilePriceChange','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');
    document.querySelectorAll('[data-quote]').forEach(element=>{element.textContent='—'});
-   setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通の架空の価格を取得しています');
+   setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通の価格データを取得しています');
   }
   if(!adminPage&&ready){
    const flash=priceStreak(displayRows().at(-1));

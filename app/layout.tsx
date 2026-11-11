@@ -1,3 +1,3 @@
 import type { Metadata } from "next";
-export const metadata: Metadata = {title:"FX SIM Dashboard",description:"架空の価格と残高を使用する取引画面"};
+export const metadata: Metadata = {title:"FX SIM Dashboard",description:"生成価格で動く取引画面。実際の売買や資金移動はありません。"};
 export default function Layout({children}:{children:React.ReactNode}){return <html lang="ja"><body>{children}</body></html>}
