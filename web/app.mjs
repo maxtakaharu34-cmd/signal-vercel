@@ -4,6 +4,7 @@ import {CHART_PERIODS,marketClock} from './market-bars.mjs';
 import {QUOTE_SIDES,quoteCandles,quotePair} from './market-quotes.mjs';
 import {mountOrderPanel} from './order-panel.mjs';
 import {tradeLevels} from './trade-levels.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo,instrumentPrice} from './instruments.mjs';
 import {createSiteClient} from './site-client.mjs';
 import {createEngine,initialCheckpoint,DEFAULT_SIGNAL,validateScene} from './engine.mjs';
 import {renderScene,renderEvents,chartHitIndex,barTimestamp} from './render.mjs';
@@ -15,7 +16,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  const $=id=>document.getElementById(id),adminPage=document.body.dataset.page==='admin';
  let client=providedClient,repository,session=null,isAdmin=false,ready=false,mfaWaiting=false,factorId=null,epoch=0,destroyed=false;
  let published={id:1,version:0,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:null},engine=createEngine(published.checkpoint),signal={...published.signal},announcement='',dirty=false,conflict=false,saving=false,playing=false,live=false,loadFailed=false,polling=false,lastPoll=0,pendingRemote=null,autoApply=false,applyTimer=null,lastReadAt=0,eventRows=[],hover=null,selectedTime=null,ma=true,bands=false,maxBars=null,unsubscribe=()=>{},authUnsubscribe=()=>{},playTimer=null,autoTimer=null,pollTimer=null,toastTimer=null;
- const preferences=adminPage?{colors:'jp',maxBars:null,changeBase:'previous'}:readDisplayPreferences(window);maxBars=preferences.maxBars;ma=preferences.ma!==false;bands=preferences.bands===true;let study=preferences.study||'none',changeBase=preferences.changeBase,flashTimer=null,viewFrame=null;const priceStreak=createPriceStreak();
+ const preferences=adminPage?{colors:'jp',maxBars:null,changeBase:'previous'}:readDisplayPreferences(window);maxBars=preferences.maxBars;ma=preferences.ma!==false;bands=preferences.bands===true;let study=preferences.study||'none',changeBase=preferences.changeBase,flashTimer=null,viewFrame=null;let priceStreak=createPriceStreak();
  let automationDraft=null,chartFocused=false,ownerEmailPending='',ownerCooldownUntil=0,ownerSending=false,ownerAuthMethod='code';
  const readMarketBars = createMarketBarReader();
  let marketView = null;
@@ -24,6 +25,12 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  let orderPanel = null;
  let orderData = {positions:[],pending:[]};
  let orderLevels = [];
+ const selectedInstrument=()=>preferences.instrument??DEFAULT_INSTRUMENT;
+ const latestQuote=(instrument=selectedInstrument())=>{
+  if(!ready||document.body.dataset.stale!=='false')return null;
+  const row=published.checkpoint.rows.at(-1);
+  return quotePair(instrumentPrice(instrument,row.time,row.close),instrument);
+ };
  const displayRows = () => chartRows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
  const savePreferences=()=>saveDisplayPreferences(window,{...preferences,maxBars,changeBase,ma,bands,study});
  function updateOrderLevels(){orderLevels=tradeLevels(orderData,preferences);paint();}
@@ -61,6 +68,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  function paint(){gates();renderSyncInfo();if($('exportScene'))$('exportScene').disabled=!ready||published.version<1;if($('exportEvents'))$('exportEvents').disabled=!ready||!eventRows.length;const record=adminPage?{...published,...draft()}:published;
   if(ready){
    const {checkpoint} = record;
+   const instrument=selectedInstrument();
    const periodPicker = $('chartPeriod');
    if (periodPicker) {
     const period = preferences.period;
@@ -70,20 +78,24 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
      const hasPeriods = !!clock && lastStep >= clock.since;
      periodPicker.hidden = !hasPeriods;
      if (periodPicker.value !== String(period)) periodPicker.value = String(period);
-     const rows = hasPeriods ? readMarketBars(checkpoint, period) : [];
+     const rows = hasPeriods ? readMarketBars(checkpoint, period, instrument) : [];
      const running = validAutomation(checkpoint.automation);
      const remainder = ((clock?.epoch ?? 0) + lastStep) % period;
      marketView = rows.length ? {rows, period, running, remaining:remainder ? period - remainder : 0} : null;
      chartFrame={checkpoint,period};
+     const label=instrumentInfo(instrument).label;
+     setText('headerInstrument',label);
+     for(const selector of document.querySelectorAll('[data-instrument-select]'))if(selector.value!==instrument)selector.value=instrument;
     }
     if(chartFrame.side!==preferences.side){
-     chartRows = quoteCandles(marketView?.rows ?? checkpoint.rows, preferences.side);
+     const rows=marketView?.rows??(instrument===DEFAULT_INSTRUMENT?checkpoint.rows:readMarketBars(checkpoint,null,instrument));
+     chartRows = quoteCandles(rows, preferences.side,instrument);
      chartFrame.side=preferences.side;
     }
    }
    if(selectedTime!==null){const width=$('chart')?.getBoundingClientRect().width||960,rows=displayRows(),visible=chartController?rows:rows.slice(-(maxBars??(width<600?36:72))),index=visible.findIndex(row=>row.time===selectedTime);hover=index>=0?index:null;if(index<0)selectedTime=null;}
-   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView,chartRows,side:preferences.side,tradeLevels:orderLevels});
-   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView,chartRows,tradeLevels:orderLevels});
+   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView,chartRows,side:preferences.side,tradeLevels:orderLevels,instrument});
+   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView,chartRows,tradeLevels:orderLevels,instrument});
   }else if(!adminPage){
    marketView=null;chartRows=null;chartFrame=null;$('chartPeriod').hidden=true;
    for(const id of ['quote','mobileQuote','mobilePriceChange','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');
@@ -91,7 +103,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通のシミュレーション価格を取得しています');
   }
   if(!adminPage&&ready){
-   const flash=priceStreak(record.checkpoint.rows.at(-1));
+   const flash=priceStreak(displayRows().at(-1));
    if(flash&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
     window.clearTimeout(flashTimer);
     const rates=document.querySelectorAll('.quote-rate');
@@ -174,15 +186,15 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if($('export'))$('export').onclick=()=>{
   const record=adminPage?draft():published,rows=displayRows();
   const prefix=marketView?'bar_start_utc':'step';
-  const heading=[prefix,'open','high','low','close',...(marketView?['status']:[]),...(!adminPage?['quote_side']:[])].join(',');
+  const heading=[prefix,'open','high','low','close',...(marketView?['status']:[]),...(!adminPage?['instrument','quote_side']:[])].join(',');
   const values=rows.map((row,index)=>{
    const quote=[row.open,row.high,row.low,row.close];
-   const side=adminPage?[]:[preferences.side];
+   const side=adminPage?[]:[selectedInstrument(),preferences.side];
    if(!marketView)return [row.time,...quote,...side].join(',');
    const status=index!==rows.length-1||!marketView.remaining?'closed':marketView.running?'forming':'stopped';
    return [barTimestamp(record.checkpoint,row.time,marketView),...quote,status,...side].join(',');
   });
-  const filename=['signal-desk-demo',marketView?marketView.period+'s':null,adminPage?null:preferences.side].filter(Boolean).join('-')+'.csv';
+  const filename=['signal-desk-demo',marketView?marketView.period+'s':null,adminPage?null:selectedInstrument().replace('/','-'),adminPage?null:preferences.side].filter(Boolean).join('-')+'.csv';
   saveDownload(window,document,[heading,...values].join('\n'),filename,'text/csv;charset=utf-8');
   toast('デモ指数のCSVを保存しました');
  };
@@ -218,6 +230,19 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  }
  document.querySelectorAll('[data-price-side]').forEach(button=>button.onclick=()=>selectRate(button.dataset.priceSide));
  if ($('chartRate')) $('chartRate').onchange = event => selectRate(event.target.value);
+ for(const selector of document.querySelectorAll('[data-instrument-select]')){
+  selector.value=selectedInstrument();
+  selector.onchange=()=>{
+   const instrument=instrumentInfo(selector.value).id;
+   if(instrument===selectedInstrument())return;
+   preferences.instrument=instrument;
+   for(const other of document.querySelectorAll('[data-instrument-select]'))if(other.value!==instrument)other.value=instrument;
+   chartFrame=null;hover=null;selectedTime=null;priceStreak=createPriceStreak();
+   chartController?.follow();
+   savePreferences();
+   updateOrderLevels();
+  };
+ }
  for(const [id,key] of [['showOrderLines','orderLines'],['showPositionLines','positionLines']]){
   const input=$(id);
   if(!input)continue;
@@ -249,7 +274,8 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if(!adminPage){
   orderPanel=mountOrderPanel({
    document,window,
-   getQuote:()=>ready&&document.body.dataset.stale==='false'?quotePair(published.checkpoint.rows.at(-1).close):null,
+   getQuote:latestQuote,
+   getInstrument:selectedInstrument,
    getScene:()=>ready?published:null,
    showTrades:()=>openView('trades'),
    onOrdersChange:orders=>{orderData=orders;updateOrderLevels();},

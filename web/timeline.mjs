@@ -1,6 +1,7 @@
 import {createIrregularPath} from './irregular-price.mjs';
 import {createPriceSignal,signalFromEvidence,SIGNAL_STEP} from './price-signal.mjs';
 import {aggregateMarketBars,CHART_PERIODS,marketClock,SIGNAL_PERIOD} from './market-bars.mjs';
+import {DEFAULT_INSTRUMENT,instrumentPrice} from './instruments.mjs';
 // A single deterministic simulation clock. Prices are synthetic and identical
 // for everyone at a given server time; work is bounded to the last 120 candles.
 const TAU=18,RATE=.00012,LIMIT=.25;
@@ -64,7 +65,20 @@ export function createExecutionPriceReader(checkpoint) {
 // Subsequent frames extend the cached bars with the same authoritative samples.
 export function createMarketBarReader() {
  const cache = new Map();
- return function readBars(checkpoint, period) {
+ const pairCache = new Map();
+ return function readBars(checkpoint, period, instrument=DEFAULT_INSTRUMENT) {
+  if(instrument!==DEFAULT_INSTRUMENT){
+   const price=step=>instrumentPrice(instrument,step);
+   const clock=marketClock(checkpoint);
+   if(period===null||!clock)return checkpoint.rows.map(row=>simulationCandle(price,0,row.time));
+   const through=checkpoint.rows.at(-1).time, key=instrument+':'+period;
+   const cached=pairCache.get(key);
+   const previous=cached?.epoch===clock.epoch&&cached.since===clock.since&&cached.through<=through?cached:null;
+   if(previous?.through===through)return previous.bars;
+   const bars=aggregateMarketBars({period,epoch:clock.epoch,first:previous?previous.through+1:clock.since,through,previous:previous?.bars,candleAt:step=>simulationCandle(price,0,step)});
+   pairCache.set(key,{epoch:clock.epoch,since:clock.since,through,bars});
+   return bars;
+  }
   if (!CHART_PERIODS.includes(period)) return [];
   const {automation:anchor, config, market, rows} = checkpoint;
   const clock = marketClock(checkpoint);
@@ -115,22 +129,35 @@ function contextFromRows(rows,originTime){
  let first=tail.length-1;while(first>0&&tail[first-1].time===tail[first].time-1)first--;
  return {firstTime:tail[first].time,closes:tail.slice(first).map(row=>row.close)};
 }
-function priceSignal(checkpoint,price=priceSampler(checkpoint)){
+function priceSignal(checkpoint,price,instrument=DEFAULT_INSTRUMENT){
+ if(instrument!==DEFAULT_INSTRUMENT)return createPriceSignal(time=>time>=0?instrumentPrice(instrument,time):null,marketClock(checkpoint).epoch%SIGNAL_STEP);
  const a=checkpoint.automation,context=a.signalContext??contextFromRows(checkpoint.rows,a.originTime);
+ price??=priceSampler(checkpoint);
  return createPriceSignal(time=>{const step=time-a.originTime;if(step>=0)return price(step);const index=time-(context?.firstTime??Infinity);return index>=0&&index<(context?.closes.length??0)?context.closes[index]:null},marketClock(checkpoint).epoch%SIGNAL_STEP);
 }
-export function signalDiagnostics(checkpoint,step,price=priceSampler(checkpoint)){
- const result=priceSignal(checkpoint,price).at(decisionTime(checkpoint,checkpoint.automation.originTime+step));
+export function signalDiagnostics(checkpoint,step,price,instrument=DEFAULT_INSTRUMENT){
+ const result=priceSignal(checkpoint,price,instrument).at(decisionTime(checkpoint,checkpoint.automation.originTime+step));
  return {...result,sample:result.sample-checkpoint.automation.originTime};
 }
-export function signalHistory(record,{count=20}={}){
- if(!validAutomation(record?.checkpoint?.automation)||!Number.isSafeInteger(record.clock?.step))return [];
- const checkpoint=record.checkpoint,a=checkpoint.automation,analyzer=priceSignal(checkpoint),last=decisionTime(checkpoint,a.originTime+record.clock.step);
- const first=Math.max(decisionTime(checkpoint,a.originTime+SIGNAL_PERIOD-1),last-(Math.max(1,Math.min(40,count))-1)*SIGNAL_PERIOD),result=[];
- for(let time=first;time<=last;time+=SIGNAL_PERIOD)result.push({step:time-a.originTime,time,...signalFromEvidence(analyzer.at(time))});
+export function instrumentSignalDiagnostics(checkpoint,instrument){
+ if(instrument===DEFAULT_INSTRUMENT)return null;
+ const clock=marketClock(checkpoint),last=checkpoint.rows.at(-1).time;
+ if(!clock||last<clock.since)return null;
+ return priceSignal(checkpoint,undefined,instrument).at(decisionTime(checkpoint,last));
+}
+export function signalHistory(record,{count=20,instrument=DEFAULT_INSTRUMENT}={}){
+ const checkpoint=record?.checkpoint,a=checkpoint?.automation,pair=instrument!==DEFAULT_INSTRUMENT;
+ if(!checkpoint)return [];
+ const market=marketClock(checkpoint);
+ const latest=checkpoint.rows.at(-1).time;
+ if(pair?(!market||latest<market.since):(!validAutomation(a)||!Number.isSafeInteger(record.clock?.step)))return [];
+ const origin=pair?market.since-1:a.originTime,analyzer=priceSignal(checkpoint,undefined,instrument);
+ const last=decisionTime(checkpoint,pair?latest:a.originTime+record.clock.step);
+ const first=Math.max(decisionTime(checkpoint,origin+SIGNAL_PERIOD-1),last-(Math.max(1,Math.min(40,count))-1)*SIGNAL_PERIOD),result=[];
+ for(let time=first;time<=last;time+=SIGNAL_PERIOD)result.push({step:time-origin,time,...signalFromEvidence(analyzer.at(time))});
  // An anchor can sit between decision candles. Its last closed decision is
  // still visible, without pretending it has a new wall-clock timestamp.
- if(!result.length)result.push({step:last-a.originTime,time:last,...signalFromEvidence(analyzer.at(last))});
+ if(!result.length)result.push({step:last-origin,time:last,...signalFromEvidence(analyzer.at(last))});
  return result;
 }
 function automaticSignal(checkpoint,step,price=priceSampler(checkpoint)){return signalFromEvidence(signalDiagnostics(checkpoint,step,price))}

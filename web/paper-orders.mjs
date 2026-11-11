@@ -1,5 +1,6 @@
 import {quotePair} from './market-quotes.mjs';
 import {createExecutionPriceReader,simulationTimestamp} from './timeline.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo,instrumentPrice} from './instruments.mjs';
 
 const POSITIONS = 'positions';
 const PENDING = 'pending';
@@ -17,10 +18,11 @@ export function closeSide(side) {
 }
 
 export function positionProfit(position, exitPrice) {
- const entryTicks = Math.round(position.open.price * 1000);
- const exitTicks = Math.round(exitPrice * 1000);
+ const scale=10**instrumentInfo(position.instrument).digits;
+ const entryTicks = Math.round(position.open.price * scale);
+ const exitTicks = Math.round(exitPrice * scale);
  const ticks = (exitTicks - entryTicks) * position.quantity;
- return (position.side === 'buy' ? ticks : -ticks) / 1000 || 0;
+ return (position.side === 'buy' ? ticks : -ticks) / scale || 0;
 }
 
 export function validOrderQuantity(quantity) {
@@ -32,10 +34,11 @@ export function triggerReached(side,type,target,price) {
  return below ? price <= target : price >= target;
 }
 
-export function validOrderTrigger(side,type,target,quote) {
- const ticks = Math.round(target*1000);
+export function validOrderTrigger(side,type,target,quote,instrument) {
+ const scale=10**instrumentInfo(instrument).digits;
+ const ticks = Math.round(target*scale);
  return Object.hasOwn(ORDER_LABELS,side) && (type==='limit'||type==='stop') &&
-  Number.isSafeInteger(ticks) && ticks>0 && ticks/1000===target &&
+  Number.isSafeInteger(ticks) && ticks>0 && ticks/scale===target &&
   !triggerReached(side,type,target,orderPrice(side,quote));
 }
 
@@ -52,7 +55,8 @@ export function matchPendingOrder(order,reader) {
  for (let step=order.cursor.time+1;step<=last;step++) {
   const close = closeAt(step);
   if (close === null) return {status:'review'};
-  const price = orderPrice(order.side,quotePair(close));
+  const instrument=order.instrument??DEFAULT_INSTRUMENT;
+  const price = orderPrice(order.side,quotePair(instrumentPrice(instrument,step,close),instrument));
   if (triggerReached(order.side,order.type,order.target,price)) return {status:'filled',price,step};
  }
  const cursor={time:last,close:closeAt(last)};
@@ -102,12 +106,12 @@ export function createPaperOrderStore(window) {
    const pending = tx.objectStore(PENDING).getAll();
    pending.onsuccess = () => complete({positions:positions.result,pending:pending.result});
   }),
-  place:({side, quantity, price, time}) => transaction(POSITIONS, 'readwrite', (tx, complete, abort) => {
+  place:({side, quantity, price, time, instrument=DEFAULT_INSTRUMENT}) => transaction(POSITIONS, 'readwrite', (tx, complete, abort) => {
    if (!Object.hasOwn(ORDER_LABELS, side) || !validOrderQuantity(quantity) || !Number.isFinite(price) || price <= 0) {
     abort(Error('注文内容を確認してください。'));
     return;
    }
-   const position = {id:window.crypto.randomUUID(), side, quantity, open:{price,time}, close:null};
+   const position = {id:window.crypto.randomUUID(), side, quantity, instrument, open:{price,time}, close:null};
    tx.objectStore(POSITIONS).add(position);
    complete(position);
   }),
@@ -125,12 +129,13 @@ export function createPaperOrderStore(window) {
     complete(position);
    };
   }),
-  placePending:({side,quantity,type,target,cursor,time}) => transaction(PENDING,'readwrite',(tx,complete,abort)=>{
-   if(!validOrderQuantity(quantity)||!validOrderTrigger(side,type,target,quotePair(cursor.close))){
+  placePending:({side,quantity,type,target,cursor,time,instrument=DEFAULT_INSTRUMENT}) => transaction(PENDING,'readwrite',(tx,complete,abort)=>{
+   const quote=quotePair(instrumentPrice(instrument,cursor.time,cursor.close),instrument);
+   if(!validOrderQuantity(quantity)||!validOrderTrigger(side,type,target,quote,instrument)){
     abort(Error('指定レートと数量を確認してください。'));
     return;
    }
-   const order={id:window.crypto.randomUUID(),side,quantity,type,target,cursor,time,status:'pending'};
+   const order={id:window.crypto.randomUUID(),side,quantity,type,target,cursor,time,instrument,status:'pending'};
    tx.objectStore(PENDING).add(order);
    complete(order);
   }),
@@ -149,7 +154,9 @@ export function createPaperOrderStore(window) {
      abort(Error('変更できる未約定注文がありません。取引画面で状態を確認してください。'));
      return;
     }
-    if(!validOrderTrigger(order.side,order.type,target,quotePair(cursor.close))){
+    const instrument=order.instrument??DEFAULT_INSTRUMENT;
+    const quote=quotePair(instrumentPrice(instrument,cursor.time,cursor.close),instrument);
+    if(!validOrderTrigger(order.side,order.type,target,quote,instrument)){
      abort(Error('指定レートを確認してください。'));
      return;
     }
@@ -167,10 +174,10 @@ export function createPaperOrderStore(window) {
      if(order.status!=='pending')continue;
      const outcome=matchPendingOrder(order,reader);
      if(outcome.status==='filled'){
-      const {id,side,quantity,type,target}=order;
+      const {id,side,quantity,type,target,instrument=DEFAULT_INSTRUMENT}=order;
       const quotedAt=Date.parse(simulationTimestamp(checkpoint,outcome.step));
       const executionTime=Number.isFinite(quotedAt)?Math.max(order.time,Math.min(time,quotedAt)):time;
-      positions.add({id,side,quantity,type,target,open:{price:outcome.price,time:executionTime},close:null});
+      positions.add({id,side,quantity,type,target,instrument,open:{price:outcome.price,time:executionTime},close:null});
       pending.delete(id);
       filled++;
      }else if(outcome.status==='review'){

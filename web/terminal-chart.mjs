@@ -2,6 +2,7 @@ import * as LightweightCharts from 'lightweight-charts';
 import {metrics} from './lib/analytics.mjs';
 import {studySeries} from './studies.mjs';
 import {simulationTimestamp} from './timeline.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo,formatRate} from './instruments.mjs';
 
 const timeFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const minuteFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
@@ -56,6 +57,7 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  let studies=[];
  let visibleLevels=EMPTY_LEVELS;
  let orderPriceLines=[];
+ let previousInstrument=DEFAULT_INSTRUMENT;
  function updateTradeLevels(levels){
   if(visibleLevels===levels)return;
   for(const line of orderPriceLines)price.removePriceLine(line);
@@ -104,12 +106,13 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
   if(time===selected)return;selected=time;onInspect(time);
  };
  chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);chart.subscribeCrosshairMove(onCrosshair);chart.subscribeClick(inspectTradeLevel);
- function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null,chartRows=null,tradeLevels=EMPTY_LEVELS}){
+ function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null,chartRows=null,tradeLevels=EMPTY_LEVELS,instrument=DEFAULT_INSTRUMENT}){
   if(destroyed)return;
   record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=chartRows??marketView?.rows??next.checkpoint.rows;
   const nextPeriod=marketView?.period??null;
   const periodChanged=period!==nextPeriod;
-  const reset=periodChanged||previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
+  const instrumentChanged=instrument!==previousInstrument;
+  const reset=instrumentChanged||periodChanged||previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
   period=nextPeriod;
   const savedRange=resolveChartWindow(nextRows,{range,following,count,reset});
   const dataChanged=periodChanged||JSON.stringify(nextRows)!==lastData,studyChanged=study!==previousStudy,colorChanged=colors!==previousColors;
@@ -118,6 +121,11 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
    const previousSelection=selected;rows=nextRows;selected=rows.some(row=>row.time===selectionTime)?selectionTime:null;
    configureStudy(study);
    const {up,down}=palette(colors);
+   if(instrumentChanged){
+    const digits=instrumentInfo(instrument).digits;
+    price.applyOptions({priceFormat:{type:'custom',minMove:10**-digits,formatter:value=>formatRate(value,instrument)}});
+    previousInstrument=instrument;
+   }
    if(colorChanged){price.applyOptions({upColor:up,downColor:down,wickUpColor:up,wickDownColor:down});previousColors=colors}
    maLine.applyOptions({visible:ma});upper.applyOptions({visible:bands});lower.applyOptions({visible:bands});
    if(dataChanged||studyChanged||colorChanged){

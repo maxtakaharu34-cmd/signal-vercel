@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {closeSide,orderPrice,positionProfit,validOrderQuantity,validOrderTrigger,matchPendingOrder} from '../web/paper-orders.mjs';
 import {quotePair} from '../web/market-quotes.mjs';
 import {initialCheckpoint,DEFAULT_SIGNAL} from '../web/engine.mjs';
-import {startAutomation,projectScene,createExecutionPriceReader} from '../web/timeline.mjs';
+import {startAutomation,stopAutomation,projectScene,createExecutionPriceReader,createMarketBarReader,signalHistory} from '../web/timeline.mjs';
 import {tradeLevels} from '../web/trade-levels.mjs';
+import {INSTRUMENTS,instrumentPrice} from '../web/instruments.mjs';
 
 test('both sides mark an immediate exit against the opposing quote and charge the spread in demo points',()=>{
  const quote=quotePair(100),quantity=3;
@@ -75,4 +76,34 @@ test('only working orders and open positions contribute to trade lines and equal
  assert.equal(grouped[0].price,100);
  assert.equal(tradeLevels({positions,pending},{orderLines:false})[0].title,'建玉 買');
  assert.equal(tradeLevels({positions,pending},{positionLines:false})[0].title,'指値 売');
+});
+
+test('BTC crosses have deterministic distinct prices and matching candles in all timeframes',()=>{
+ const now=Date.parse('2026-11-11T01:00:00Z');
+ const source=startAutomation({checkpoint:initialCheckpoint(),signal:DEFAULT_SIGNAL},0,now);
+ const {checkpoint}=projectScene(source,now+121000),read=createMarketBarReader(),step=checkpoint.rows.at(-1).time;
+ assert.equal(INSTRUMENTS.filter(pair=>pair.id.startsWith('BTC/')).length,20);
+ for(const {id} of INSTRUMENTS.slice(1)){
+  const expected=instrumentPrice(id,step);
+  for(const period of [1,15,60])assert.equal(read(checkpoint,period,id).at(-1).close,expected);
+  assert.ok(quotePair(expected,id).ask>quotePair(expected,id).bid);
+ }
+ const change=id=>instrumentPrice(id,step)/instrumentPrice(id,step-50);
+ assert.notEqual(change('BTC/JPY'),change('BTC/ETH'));
+ const before=projectScene(source,now+121000),stopped=stopAutomation(source,now+121000);
+ assert.deepEqual(signalHistory(stopped,{instrument:'BTC/JPY'}),signalHistory(before,{instrument:'BTC/JPY'}));
+ assert.deepEqual(read(stopped.checkpoint,15,'BTC/ETH'),read(before.checkpoint,15,'BTC/ETH'));
+});
+
+test('pending orders match their own pair and BTC/JPY uses whole-yen price increments',()=>{
+ const instrument='BTC/JPY', first=100;
+ const bidAt=time=>quotePair(instrumentPrice(instrument,time),instrument).bid;
+ const last=Array.from({length:40},(_,i)=>first+i+1).find(time=>bidAt(time)!==bidAt(first));
+ const target=bidAt(last),type=target>bidAt(first)?'limit':'stop';
+ const order={side:'sell',type,target,instrument,cursor:{time:first,close:100}};
+ const quote=quotePair(instrumentPrice(instrument,first),instrument);
+ assert.equal(validOrderTrigger(order.side,type,target,quote,instrument),true);
+ assert.equal(validOrderTrigger(order.side,type,target+.1,quote,instrument),false);
+ assert.deepEqual(matchPendingOrder(order,{first,last,closeAt:()=>100}),{status:'filled',price:target,step:last});
+ assert.deepEqual(tradeLevels({positions:[],pending:[{...order,status:'pending'}]}),[]);
 });

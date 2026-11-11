@@ -1,10 +1,9 @@
 import {createPaperOrderStore,closeSide,orderPrice,positionProfit,validOrderTrigger,ORDER_LABELS,ORDER_TYPES} from './paper-orders.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo,formatRate} from './instruments.mjs';
 
-const number = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFractionDigits:3});
-const signed = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFractionDigits:3,signDisplay:'exceptZero'});
 const clock = new Intl.DateTimeFormat('ja-JP', {timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 
-export function mountOrderPanel({document,window,getQuote,getScene,showTrades,notify,onOrdersChange}) {
+export function mountOrderPanel({document,window,getQuote,getScene,getInstrument,showTrades,notify,onOrdersChange}) {
  const $ = id => document.getElementById(id);
  const dialog = $('orderDialog');
  const form = $('orderForm');
@@ -56,19 +55,20 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   for (const trigger of triggers) trigger.disabled = !quote;
   for (const button of amendments) button.disabled = !quote;
   for (const {position, value, button} of marks) {
-   button.disabled = !quote;
-   const profit = quote ? positionProfit(position, orderPrice(closeSide(position.side), quote)) : null;
-   value.textContent = profit === null ? '—' : signed.format(profit) + ' pt';
+   const instrument=position.instrument??DEFAULT_INSTRUMENT,mark=getQuote(instrument);
+   button.disabled = !mark;
+   const profit = mark ? positionProfit(position, orderPrice(closeSide(position.side), mark)) : null;
+   value.textContent = profit === null ? '—' : formatRate(profit,instrument,true) + ' pt';
    value.dataset.profit = profit > 0 ? 'up' : profit < 0 ? 'down' : 'neutral';
   }
   if (!action || !dialog.open) return;
-  const price = quote ? orderPrice(action.side, quote) : null;
-  set('orderRate', price === null ? '—' : number.format(price));
+  const live=getQuote(action.instrument),price=live?orderPrice(action.side,live):null;
+  set('orderRate',formatRate(price,action.instrument));
   if (action.position) {
-   set('orderProfit', price === null ? '—' : signed.format(positionProfit(action.position, price)) + ' pt');
+   set('orderProfit', price === null ? '—' : formatRate(positionProfit(action.position,price),action.instrument,true) + ' pt');
   }
-  $('orderNoQuote').hidden = !!quote;
-  submit.disabled = busy || !quote;
+  $('orderNoQuote').hidden = !!live;
+  submit.disabled = busy || !live;
  }
 
  function updateOrderType() {
@@ -86,8 +86,12 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
  }
 
  function open(side, {position=null,pending=null,fromChart=false}={}) {
-  if (!getQuote() || dialog.open) return false;
-  action = {side, position, pending, fromChart};
+  const instrument=position||pending?(position??pending).instrument??DEFAULT_INSTRUMENT:getInstrument();
+  if (!getQuote(instrument) || dialog.open) return false;
+  action = {side, position, pending, fromChart,instrument};
+  $('orderInstrument').textContent=instrumentInfo(instrument).label;
+  target.step=String(10**-instrumentInfo(instrument).digits);
+  target.min=target.step;
   $('orderDialogTitle').textContent = position ? 'デモ決済' : pending ? 'デモ注文の変更' : 'デモ注文';
   $('orderDirection').textContent = ORDER_LABELS[side];
   $('orderDirection').dataset.side = side;
@@ -120,8 +124,8 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   hasPending=pending.some(order=>order.status==='pending');
   const openPositions = positions.filter(position => !position.close).sort((a,b)=>b.open.time-a.open.time);
   const fills = positions.flatMap(position => [
-   {side:position.side,quantity:position.quantity,kind:position.type?'新規 '+ORDER_TYPES[position.type]:'新規',...position.open},
-   ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,kind:'決済',profit:positionProfit(position,position.close.price),...position.close}] : []),
+   {side:position.side,quantity:position.quantity,instrument:position.instrument,kind:position.type?'新規 '+ORDER_TYPES[position.type]:'新規',...position.open},
+   ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,instrument:position.instrument,kind:'決済',profit:positionProfit(position,position.close.price),...position.close}] : []),
   ]).sort((a,b)=>b.time-a.time).slice(0,50);
 
   amendments=[];
@@ -130,7 +134,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    const side=element('b',ORDER_LABELS[order.side],'order-direction');
    side.dataset.side=order.side;
    const info=element('span','','order-entry');
-   info.append(element('b',number.format(order.target),'mono'),element('small',ORDER_TYPES[order.type]+' · 数量 '+order.quantity));
+   info.append(element('small',instrumentInfo(order.instrument).label),element('b',formatRate(order.target,order.instrument),'mono'),element('small',ORDER_TYPES[order.type]+' · 数量 '+order.quantity));
    const status=element('span',order.status==='review'?'履歴不足 · 停止':'待機中','order-pending-status');
    status.dataset.state=order.status;
    const button=element('button','取消','order-close-position');
@@ -166,7 +170,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    const side = element('b',ORDER_LABELS[position.side],'order-direction');
    side.dataset.side = position.side;
    const entry = element('span','','order-entry');
-   entry.append(element('b',number.format(position.open.price),'mono'),element('small','数量 '+position.quantity));
+   entry.append(element('small',instrumentInfo(position.instrument).label),element('b',formatRate(position.open.price,position.instrument),'mono'),element('small','数量 '+position.quantity));
    const value = element('b','—','mono order-profit');
    const button = element('button','決済','order-close-position');
    button.type = 'button';
@@ -181,10 +185,10 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    const side = element('b',ORDER_LABELS[fill.side],'order-direction');
    side.dataset.side = fill.side;
    const info = element('span','','order-entry');
-   info.append(element('b',number.format(fill.price),'mono'),element('small',fill.kind+' · 数量 '+fill.quantity));
+   info.append(element('small',instrumentInfo(fill.instrument).label),element('b',formatRate(fill.price,fill.instrument),'mono'),element('small',fill.kind+' · 数量 '+fill.quantity));
    const time = element('span','','order-entry order-fill-time');
    time.append(element('time',clock.format(fill.time),'mono'));
-   if (fill.profit !== undefined) time.append(element('small',signed.format(fill.profit)+' pt','mono'));
+   if (fill.profit !== undefined) time.append(element('small',formatRate(fill.profit,fill.instrument,true)+' pt','mono'));
    row.append(side,info,time);
    return row;
   }));
@@ -210,12 +214,12 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
 
  form.onsubmit = async event => {
   event.preventDefault();
-  const quote = getQuote();
+  const quote = getQuote(action?.instrument);
   if (busy || !action || !quote || !form.reportValidity()) return;
-  const {side,position,pending,fromChart} = action;
+  const {side,position,pending,fromChart,instrument} = action;
   const type=position?'market':orderType.value;
   const condition=target.valueAsNumber;
-  if(type!=='market'&&!validOrderTrigger(side,type,condition,quote)){
+  if(type!=='market'&&!validOrderTrigger(side,type,condition,quote,instrument)){
    set('orderError',$('orderTargetHelp').textContent+'してください。');
    $('orderError').hidden=false;
    return;
@@ -228,13 +232,13 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   updateQuote();
   try {
    if (position) await store.close(position.id,quote,time);
-   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time});
+   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time,instrument});
    else{
     const row=scene.checkpoint.rows.at(-1),cursor={time:row.time,close:row.close,version:scene.version};
     if(pending){
      await store.match(scene,time);
      await store.amend(pending.id,{target:condition,cursor});
-    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time});
+    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time,instrument});
     lastMatched=null;
    }
   } catch(error) {

@@ -1,15 +1,16 @@
 import {CHART_PERIODS, SIGNAL_PERIOD} from './market-bars.mjs';
 import {QUOTE_SIDES} from './market-quotes.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo} from './instruments.mjs';
 
 // These are local display preferences, never scenario data or account state.
 const KEY='fx-demo-display-v1';
 const chartPeriod=value=>CHART_PERIODS.includes(value)?value:SIGNAL_PERIOD;
 const quoteSide=value=>QUOTE_SIDES.includes(value)?value:'bid';
 export function readDisplayPreferences(window){
- try{const value=JSON.parse(window.localStorage.getItem(KEY)||'{}');return {colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none',period:chartPeriod(value.period),side:quoteSide(value.side),orderLines:value.orderLines!==false,positionLines:value.positionLines!==false}}catch{return {colors:'jp',maxBars:null,changeBase:'previous',ma:true,bands:false,study:'none',period:SIGNAL_PERIOD,side:'bid',orderLines:true,positionLines:true}}
+ try{const value=JSON.parse(window.localStorage.getItem(KEY)||'{}');return {colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none',period:chartPeriod(value.period),side:quoteSide(value.side),orderLines:value.orderLines!==false,positionLines:value.positionLines!==false,instrument:instrumentInfo(value.instrument).id}}catch{return {colors:'jp',maxBars:null,changeBase:'previous',ma:true,bands:false,study:'none',period:SIGNAL_PERIOD,side:'bid',orderLines:true,positionLines:true,instrument:DEFAULT_INSTRUMENT}}
 }
 export function saveDisplayPreferences(window,value){
- try{window.localStorage.setItem(KEY,JSON.stringify({colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none',period:chartPeriod(value.period),side:quoteSide(value.side),orderLines:value.orderLines!==false,positionLines:value.positionLines!==false}))}catch{}
+ try{window.localStorage.setItem(KEY,JSON.stringify({colors:value.colors==='intl'?'intl':'jp',maxBars:[36,72].includes(value.maxBars)?value.maxBars:null,changeBase:value.changeBase==='period'?'period':'previous',ma:value.ma!==false,bands:value.bands===true,study:['rsi','macd'].includes(value.study)?value.study:'none',period:chartPeriod(value.period),side:quoteSide(value.side),orderLines:value.orderLines!==false,positionLines:value.positionLines!==false,instrument:instrumentInfo(value.instrument).id}))}catch{}
 }
 export function quoteChange(rows,{base='previous',count=72}={}){
  const last=rows.at(-1);if(!last)return 0;

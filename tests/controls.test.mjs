@@ -17,6 +17,21 @@ async function boot({page='viewer',signed=true,admin=false,mfa=false,offline=fal
  return {window,document:window.document,app,resizeChart(width,height){chartSize={width,height,left:0};window.dispatchEvent(new window.Event('resize'))},get publishCalls(){return publishCalls},holdPublish(){let release;publishHold=new Promise(r=>release=r);return ()=>{publishHold=null;release()}},reject(error){rejectPublish=error},async publish(){window.document.getElementById('publish').click();await tick();await tick()},remote(value){record={...record,...value};remote({new:structuredClone(record)})},auth(next){authListener('SIGNED_OUT',next)},async close(){app.destroy();await window.happyDOM.close()}};
 }
 test('viewer contains the chart, six-level signal and no scenario editing controls',async()=>{const a=await boot();try{assert.equal(a.document.querySelectorAll('[data-dir]').length,0);assert.equal(a.document.querySelectorAll('[data-level-bar]').length,6);assert.equal(a.document.getElementById('signalCode').textContent,'WAIT');assert.match(a.document.getElementById('chart').innerHTML,/<rect/);assert.equal(a.document.getElementById('candleRows').children.length,10)}finally{await a.close()}});
+test('changing the selected pair also changes chart quotes, history, and the order ticket',async()=>{
+ const a=await boot();
+ try{
+  const get=id=>a.document.getElementById(id);
+  const picker=a.document.querySelector('[data-instrument-select]');
+  picker.value='BTC/JPY';picker.dispatchEvent(new a.window.Event('change'));
+  assert.match(get('historyPeriod').textContent,/BTC\/JPY/);
+  assert.equal(get('ohlc-close').textContent,get('rate-mobile-bid').textContent);
+  a.document.querySelector('[data-order-side=buy]').click();
+  assert.equal(get('orderInstrument').textContent,'BTC/JPY');
+  assert.equal(get('orderRate').textContent,get('rate-mobile-ask').textContent);
+  assert.equal(get('orderTarget').step,'1');
+  assert.equal(a.publishCalls,0);
+ }finally{await a.close()}
+});
 test('buy and sell open a confirmation using their respective quote and suspend confirmation offline',async()=>{
  const a=await boot();
  try{
@@ -144,7 +159,7 @@ test('six level names identify the selected level and explain independently conf
 
 test('display colors and candle count persist locally without publishing and touch drag selects candles',async()=>{const a=await boot();try{
  const colors=a.document.getElementById('colorConvention');assert.equal(colors.value,'jp');colors.value='intl';colors.dispatchEvent(new a.window.Event('change'));assert.equal(a.document.documentElement.dataset.colors,'intl');
- a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','ma','maxBars','orderLines','period','positionLines','side','study']);
+ a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','instrument','ma','maxBars','orderLines','period','positionLines','side','study']);
  const chart=a.document.getElementById('chart');chart.dispatchEvent(new a.window.PointerEvent('pointerdown',{clientX:22,pointerType:'touch',pointerId:1,bubbles:true}));const first=a.document.getElementById('ohlc-open').textContent;chart.dispatchEvent(new a.window.PointerEvent('pointermove',{clientX:300,pointerType:'touch',pointerId:1,bubbles:true}));assert.notEqual(a.document.getElementById('ohlc-open').textContent,first);chart.dispatchEvent(new a.window.PointerEvent('pointerup',{pointerId:1,pointerType:'touch',bubbles:true}));assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
 

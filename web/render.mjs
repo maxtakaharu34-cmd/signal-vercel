@@ -1,14 +1,17 @@
-import {validAutomation,signalDiagnostics,signalHistory,simulationTimestamp,signalTimestamp} from './timeline.mjs';
+import {validAutomation,signalDiagnostics,signalHistory,simulationTimestamp,signalTimestamp,instrumentSignalDiagnostics} from './timeline.mjs';
 import {SIGNAL_PERIOD} from './market-bars.mjs';
 import {quotePair,QUOTE_LABELS} from './market-quotes.mjs';
+import {DEFAULT_INSTRUMENT,instrumentInfo,instrumentPrice,formatRate} from './instruments.mjs';
+import {signalFromEvidence} from './price-signal.mjs';
 import {marketContext} from './market-context.mjs';
 import {quoteChange} from './presentation.mjs';
 import {metrics} from './lib/analytics.mjs';
 import {studySeries,studySvg} from './studies.mjs';
 import {LEVELS,directionLabel,directionCode} from './engine.mjs';
 const number=(value,digits=3)=>value==null?'—':Number(value).toLocaleString('en-US',{minimumFractionDigits:digits,maximumFractionDigits:digits});
-function renderViewerQuote(element, price) {
+function renderViewerQuote(element, price, split=true) {
  if (!element || element.textContent === price) return;
+ if (!split) {element.textContent=price;return;}
  const emphasis = element.ownerDocument.createElement('span');
  emphasis.className = 'quote-precision';
  emphasis.textContent = price.slice(-2);
@@ -21,13 +24,13 @@ export function barTimestamp(checkpoint, time, marketView) {
 }
 export function chartGeometry(width,height,count){const right=width-80,top=24,bottom=height-48,step=(right-30)/count;return {right,top,bottom,plotHeight:bottom-top,step,candleWidth:Math.min(6.4,step*.7)}}
 export function chartHitIndex(position,width,count){const {step}=chartGeometry(width,380,count);return Math.max(0,Math.min(count-1,Math.round((position-22)/step)))}
-export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=380,maxBars=null,timeLabel=null,tradeLevels=[]}={}){
+export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=380,maxBars=null,timeLabel=null,tradeLevels=[],instrument=DEFAULT_INSTRUMENT}={}){
  const count=Math.min(maxBars??(width<600?36:72),rows.length),data=rows.slice(-count),calc=metrics(rows),offset=rows.length-data.length;
  const overlayValues=[...(bands?calc.overlays.bands.slice(offset).flatMap(b=>b?[b.upper,b.lower]:[]):[]),...(ma?calc.overlays.sma.slice(offset).filter(v=>v!=null):[])];
  const minimum=Math.min(...data.map(c=>c.low),...overlayValues),maximum=Math.max(...data.map(c=>c.high),...overlayValues),padding=Math.max((maximum-minimum)*.12,.02),low=minimum-padding,high=maximum+padding;
  const {right,top,bottom,plotHeight,step,candleWidth}=chartGeometry(width,height,data.length);
  const x=i=>22+i*step,y=value=>top+(high-value)/(high-low)*plotHeight;
- let svg='';const gridCount=height<200?4:6;for(let i=0;i<gridCount;i++){const yy=top+plotHeight*i/(gridCount-1);svg+=`<line x1="8" x2="${right}" y1="${yy}" y2="${yy}" stroke="var(--chart-grid, #344152)"/><text x="${width-66}" y="${yy+4}" fill="var(--chart-label, #a4afbe)" font-size="11" font-family="monospace">${number(high-(high-low)*i/(gridCount-1))}</text>`}
+ let svg='';const gridCount=height<200?4:6;for(let i=0;i<gridCount;i++){const yy=top+plotHeight*i/(gridCount-1);svg+=`<line x1="8" x2="${right}" y1="${yy}" y2="${yy}" stroke="var(--chart-grid, #344152)"/><text x="${width-66}" y="${yy+4}" fill="var(--chart-label, #a4afbe)" font-size="11" font-family="monospace">${formatRate(high-(high-low)*i/(gridCount-1),instrument)}</text>`}
  const line=(values,color,dashed=false)=>{let path='';values.slice(offset).forEach((v,i)=>{if(v!=null)path+=(path?'L':'M')+x(i)+' '+y(v)+' '});return `<path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" ${dashed?'stroke-dasharray="5 4"':''}/>`};
  if(ma)svg+=line(calc.overlays.sma,'var(--chart-ma, #cb9c48)');if(bands){svg+=line(calc.overlays.bands.map(b=>b?.upper??null),'var(--chart-band, #96afd0)',true)+line(calc.overlays.bands.map(b=>b?.lower??null),'var(--chart-band, #96afd0)',true)}
  data.forEach((c,i)=>{const color=c.close>=c.open?'var(--chart-up, #099b72)':'var(--chart-down, #db5362)';svg+=`<line x1="${x(i)}" x2="${x(i)}" y1="${y(c.high)}" y2="${y(c.low)}" stroke="${color}" stroke-width="1.2"/><rect x="${x(i)-candleWidth/2}" y="${Math.min(y(c.open),y(c.close))}" width="${candleWidth}" height="${Math.max(1.2,Math.abs(y(c.open)-y(c.close)))}" fill="${color}" class="candle-body${i===data.length-1?' latest-candle':''}" rx=".5"/>`});
@@ -36,7 +39,7 @@ export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=3
   const yy=y(level.price),dash=level.kind==='position'?'':level.kind==='stop'?'2 3':'5 4';
   svg+=`<line x1="8" x2="${right}" y1="${yy}" y2="${yy}" stroke="${level.color}" stroke-dasharray="${dash}"/><text x="10" y="${yy-3}" fill="${level.color}" font-size="11">${level.title}</text>`;
  }
- const last=data.at(-1);svg+=`<line x1="8" x2="${right}" y1="${y(last.close)}" y2="${y(last.close)}" stroke="#2b67b8" stroke-dasharray="4 4" opacity=".65"/><rect x="${width-72}" y="${y(last.close)-10}" width="70" height="20" rx="3" fill="#285e9d"/><text x="${width-37}" y="${y(last.close)+4}" text-anchor="middle" font-size="11" fill="white" font-family="monospace">${number(last.close)}</text>`;
+ const last=data.at(-1);svg+=`<line x1="8" x2="${right}" y1="${y(last.close)}" y2="${y(last.close)}" stroke="#2b67b8" stroke-dasharray="4 4" opacity=".65"/><rect x="${width-72}" y="${y(last.close)-10}" width="70" height="20" rx="3" fill="#285e9d"/><text x="${width-37}" y="${y(last.close)+4}" text-anchor="middle" font-size="11" fill="white" font-family="monospace">${formatRate(last.close,instrument)}</text>`;
  if(hover!=null&&data[hover])svg+=`<line class="crosshair-horizontal" x1="8" x2="${right}" y1="${y(data[hover].close)}" y2="${y(data[hover].close)}" stroke="#a7b6ca" stroke-dasharray="3 4"/><circle cx="${x(hover)}" cy="${y(data[hover].close)}" r="3" stroke="var(--chart-label, #e3eaf4)" fill="var(--chart-surface, #171e28)"/><line x1="${x(hover)}" x2="${x(hover)}" y1="15" y2="${bottom}" stroke="#8a9bae" stroke-dasharray="3 4"/>`;
  const ticks=timeLabel&&width<340?[0,count-1]:width<480?[0,Math.floor(count/2),count-1]:[0,Math.floor(count/4),Math.floor(count/2),Math.floor(count*3/4),count-1];
  for(const i of [...new Set(ticks)])if(data[i])svg+=`<text x="${x(i)}" y="${height-14}" text-anchor="${timeLabel?(i===0?'start':i===count-1?'end':'middle'):'middle'}" fill="var(--chart-label, #9aabc2)" font-size="11" font-family="monospace">${timeLabel?timeLabel(data[i]):'T'+String(data[i].time).padStart(3,'0')}</text>`;
@@ -45,7 +48,7 @@ export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=3
 function contextDirection(value){return value===null?'データ不足':value>0?'上向き':value<0?'下向き':'中立'}
 function tone(value){return value>0?'up':value<0?'down':'neutral'}
 const analysisRecords=new WeakMap();
-function renderAnalysis(document,record,rows){
+function renderAnalysis(document,record,rows,instrument,pairEvidence){
  const previous=analysisRecords.get(document);
  if(previous?.record===record && previous.rows===rows)return;
  analysisRecords.set(document,{record,rows});
@@ -54,45 +57,50 @@ function renderAnalysis(document,record,rows){
  if($('contextHorizons'))$('contextHorizons').innerHTML=context.horizons.map(h=>`<div data-tone="${tone(h.direction)}"><span>${h.label} <small>${h.period}本</small></span><strong>${contextDirection(h.direction)}</strong><b class="mono">${h.change===null?'—':(h.change>=0?'+':'')+number(h.change,3)+'%'}</b></div>`).join('');
  set('contextAgreement',context.agreement);set('contextVolatility',context.volatility);set('contextVolatilityRatio',(context.volatilityRatio===null?'比較不可':number(context.volatilityRatio,2)+'倍')+' · 直近8本 / 前24本');set('contextShape',context.shape);set('contextAtr','ATR 14 / 終値 '+number(context.atrPercent,3)+'%');
  if($('contextReferences'))$('contextReferences').innerHTML=context.references.map(r=>`<div><span>${r.label}</span><strong data-tone="${tone(r.direction)}">${contextDirection(r.direction)}</strong><small>${r.description}</small></div>`).join('');
- const history=signalHistory(record),latest=history.at(-1),signalTime=h=>{const stamp=signalTimestamp(record.checkpoint,h.time);return stamp?shortTime(stamp)+' JST':'T'+h.time};set('signalSample',latest?signalTime(latest):record.updated_at?time(record.updated_at):'—');
+ const history=signalHistory(record,{instrument}),latest=history.at(-1),signalTime=h=>{const stamp=signalTimestamp(record.checkpoint,h.time);return stamp?shortTime(stamp)+' JST':'T'+h.time};set('signalSample',latest?signalTime(latest):record.updated_at?time(record.updated_at):'—');
  if($('signalTrail')){
   $('signalTrail').innerHTML=history.map(h=>`<span role="img" aria-label="${signalTime(h)} · ${contextDirection(h.direction)} ${h.level}" data-tone="${tone(h.direction)}" data-strength="${LEVELS.indexOf(h.level)+1}" title="${signalTime(h)} · T${h.time} ${contextDirection(h.direction)} ${h.level}"></span>`).join('');
   $('signalTrail').setAttribute('aria-label',history.length?history.map(h=>'T'+h.time+' '+contextDirection(h.direction)+' '+h.level).join('、'):'手動設定のため、自動判定の履歴はありません');
  }
  set('signalTrailCaption',history.length?SIGNAL_PERIOD+'秒足の確定時に判定 · 直近'+history.length+'件':'手動設定 · 自動判定の履歴なし');
  if($('signalBreakdown')){
-  if(latest){const d=signalDiagnostics(record.checkpoint,record.clock.step);$('signalBreakdown').innerHTML=[['短期の勢い · 8本（1秒足）',d.short,true],['中期の勢い · 24本（1秒足）',d.medium,true],['長期の勢い · 48本（1秒足）',d.long,true],['方向の一致度',d.agreement,false],['値動きの継続性',d.efficiency,false],['合成スコア',d.score,true]].map(([label,value,signed])=>`<div><span>${label}</span><b class="mono" data-tone="${signed?tone(value):'neutral'}">${signed&&value>=0?'+':''}${number(value,3)}</b></div>`).join('')}
+  if(latest){const d=pairEvidence??signalDiagnostics(record.checkpoint,record.clock.step);$('signalBreakdown').innerHTML=[['短期の勢い · 8本（1秒足）',d.short,true],['中期の勢い · 24本（1秒足）',d.medium,true],['長期の勢い · 48本（1秒足）',d.long,true],['方向の一致度',d.agreement,false],['値動きの継続性',d.efficiency,false],['合成スコア',d.score,true]].map(([label,value,signed])=>`<div><span>${label}</span><b class="mono" data-tone="${signed?tone(value):'neutral'}">${signed&&value>=0?'+':''}${number(value,3)}</b></div>`).join('')}
   else $('signalBreakdown').textContent='管理者による手動設定です。自動算出の内訳はありません。';
  }
 }
-export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null,marketView=null,chartRows=null,side='mid',tradeLevels=[]}={}){
+export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null,marketView=null,chartRows=null,side='mid',tradeLevels=[],instrument=DEFAULT_INSTRUMENT}={}){
  const $=id=>document.getElementById(id),set=(id,value)=>{const e=$(id);if(e&&e.textContent!==String(value))e.textContent=value};
- const {checkpoint,signal}=record,rows=chartRows??marketView?.rows??checkpoint.rows;
+ const {checkpoint}=record,rows=chartRows??marketView?.rows??checkpoint.rows;
  if($('chartArea'))$('chartArea').dataset.study=study;const chartElement=externalChart?$('tradeChart'):$('chart'),rect=chartElement?.getBoundingClientRect(),width=Math.max(240,Math.round(rect?.width||960)),height=Math.max(116,Math.round(rect?.height||380)),visibleCount=Math.min(maxBars??(width<600?36:72),rows.length);
+ const running=validAutomation(checkpoint.automation);
+ const pair=instrument!==DEFAULT_INSTRUMENT;
+ const pairEvidence=pair?instrumentSignalDiagnostics(checkpoint,instrument):null;
+ const signal=pair?(pairEvidence?signalFromEvidence(pairEvidence):{direction:0,level:LEVELS[0],note:'時間足のデータ確認中。'}):record.signal;
  const data=rows.slice(-visibleCount),last=rows.at(-1),change=quoteChange(rows,{base:changeBase,count:visibleCount}),calc=metrics(rows),level=LEVELS.indexOf(signal.level);
  const timestamp=time=>barTimestamp(checkpoint,time,marketView);
  const periodLabel=marketView?.period===60?'1分足':marketView?marketView.period+'秒足':null;
  const rateLabel=QUOTE_LABELS[side];
- const labels=[periodLabel,$('chartRate')?rateLabel:null].filter(Boolean);
+ const labels=[instrument===DEFAULT_INSTRUMENT?null:instrument,periodLabel,$('chartRate')?rateLabel:null].filter(Boolean);
  set('analysisPeriod',labels.join(' · ')||'仮想OHLCから算出');
  set('historyPeriod',[...labels,'直近10本','新しい順'].join(' · '));
- renderAnalysis(document,record,rows);
- const running=validAutomation(checkpoint.automation);set('settingModel',running?(checkpoint.automation.priceModel===2?'不規則な値動き':'周期モデル（旧）'):'手動');set('settingRunState',running?'自動生成中':'手動／停止');set('generatedAt',running&&record.clock?.generatedAt?time(record.clock.generatedAt):'—');
- const card=$('signalCard');if(card){const tag=card.querySelector('.small-tag'),source=card.querySelector('.signal-source');if(tag)tag.textContent=running?'価格から判定':'管理者設定';if(source)source.textContent=running?signal.note.split('。')[0]+' · 仮想価格の変化から判定':'管理者が設定した仮想シナリオ'}
- const mobileSource=document.querySelector('.signal-bar-label');if(mobileSource)mobileSource.textContent=running?signal.note.split('。')[0]:'手動設定';
- const center=checkpoint.rows.at(-1).close;
- set('quote',number(center));
+ renderAnalysis(document,record,rows,instrument,pairEvidence);
+ set('settingModel',running?(checkpoint.automation.priceModel===2?'不規則な値動き':'周期モデル（旧）'):'手動');set('settingRunState',running?'自動生成中':'手動／停止');set('generatedAt',running&&record.clock?.generatedAt?time(record.clock.generatedAt):'—');
+ const card=$('signalCard');if(card){const tag=card.querySelector('.small-tag'),source=card.querySelector('.signal-source');if(tag)tag.textContent=running?'価格から判定':pair?'停止中':'管理者設定';if(source)source.textContent=running?signal.note.split('。')[0]+' · 仮想価格の変化から判定':pair?signal.note:'管理者が設定した仮想シナリオ'}
+ const mobileSource=document.querySelector('.signal-bar-label');if(mobileSource)mobileSource.textContent=running?signal.note.split('。')[0]:pair?'停止中':'手動設定';
+ const raw=checkpoint.rows.at(-1),center=instrumentPrice(instrument,raw.time,raw.close);
+ set('quote',formatRate(center,instrument));
  if ($('chartRate')) {
-  const rates=quotePair(center);
+  const rates=quotePair(center,instrument);
   for(const price of document.querySelectorAll('[data-quote]')){
-   const value=number(rates[price.dataset.quote]);
+   const value=formatRate(rates[price.dataset.quote],instrument);
    if(price.dataset.quote==='spread'){if(price.textContent!==value)price.textContent=value;}
-   else renderViewerQuote(price,value);
+   else renderViewerQuote(price,value,instrumentInfo(instrument).digits>0);
   }
   for(const button of document.querySelectorAll('[data-price-side]'))button.setAttribute('aria-pressed',String(button.dataset.priceSide===side));
   if($('chartRate').value!==side)$('chartRate').value=side;
-  for(const id of ['desktopRateBasis','mobileRateBasis','chartRateCompact'])set(id,rateLabel);
-  set('mobileQuote',number(center));
+  for(const id of ['desktopRateBasis','mobileRateBasis'])set(id,rateLabel);
+  set('chartRateCompact',instrument===DEFAULT_INSTRUMENT?rateLabel:instrument+' · '+rateLabel);
+  set('mobileQuote',formatRate(center,instrument));
   for(const id of ['quote','mobileQuote'])$(id).hidden=side!=='mid';
  }
  set('priceChangeBase',changeBase==='period'?'表示期間の最初の足比':'直前の足比');
@@ -103,19 +111,19 @@ export function renderScene(document,record,{ma=true,bands=false,study='none',ho
   set(id,formattedChange);
   $(id)?.setAttribute('data-tone',visibleChange>0?'up':visibleChange<0?'down':'neutral');
  }
- const selectedIndex=externalChart?rows.findIndex(row=>row.time===selectionTime):hover,selectionRows=externalChart?rows:data;if($('previousCandle'))$('previousCandle').disabled=selectedIndex===0;if($('nextCandle'))$('nextCandle').disabled=selectedIndex==null||selectedIndex<0||selectedIndex>=selectionRows.length-1;set('statHigh',number(Math.max(...data.map(c=>c.high))));set('statLow',number(Math.min(...data.map(c=>c.low))));set('statRange',number(Math.max(...data.map(c=>c.high))-Math.min(...data.map(c=>c.low))));set('statCount',String(checkpoint.total));
- const tone=signal.direction>0?'up':signal.direction<0?'down':'neutral',symbol=signal.direction>0?'▲':signal.direction<0?'▼':'―';set('mobileSignalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('mobileSignalDirection')?.setAttribute('data-icon',symbol);$('signalDirection')?.setAttribute('data-icon',symbol);$('mobileSignalBar')?.setAttribute('data-tone',tone);$('landscapeTicker')?.setAttribute('data-tone',tone);$('signalDetailsToggle')?.setAttribute('data-tone',tone);set('landscapeSignal',symbol+' '+(signal.direction===0?'待機':directionLabel(signal.direction))+' · '+signal.level);set('mobileSignalLevel',signal.level+' '+(level+1)+'/6');set('mobileScenario','価格の生成方向：'+directionLabel(checkpoint.config.direction)+(running?' · 自動生成':' · 管理者設定'));const differs=signal.direction!==checkpoint.config.direction;set('signalRelation','価格の生成方向は'+directionLabel(checkpoint.config.direction)+'、表示シグナルは'+(signal.direction===0?'待機':directionLabel(signal.direction))+'です。');if($('signalRelation'))$('signalRelation').hidden=!differs;set('signalCode',directionCode(signal.direction));set('signalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('signalCard')?.setAttribute('data-tone',signal.direction>0?'up':signal.direction<0?'down':'neutral');set('signalLevel',signal.level);set('signalFraction',`${level+1} / 6`);set('signalNote',signal.note);
+ const selectedIndex=externalChart?rows.findIndex(row=>row.time===selectionTime):hover,selectionRows=externalChart?rows:data;if($('previousCandle'))$('previousCandle').disabled=selectedIndex===0;if($('nextCandle'))$('nextCandle').disabled=selectedIndex==null||selectedIndex<0||selectedIndex>=selectionRows.length-1;set('statHigh',formatRate(Math.max(...data.map(c=>c.high)),instrument));set('statLow',formatRate(Math.min(...data.map(c=>c.low)),instrument));set('statRange',formatRate(Math.max(...data.map(c=>c.high))-Math.min(...data.map(c=>c.low)),instrument));set('statCount',String(checkpoint.total));
+ const tone=signal.direction>0?'up':signal.direction<0?'down':'neutral',symbol=signal.direction>0?'▲':signal.direction<0?'▼':'―';set('mobileSignalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('mobileSignalDirection')?.setAttribute('data-icon',symbol);$('signalDirection')?.setAttribute('data-icon',symbol);$('mobileSignalBar')?.setAttribute('data-tone',tone);$('landscapeTicker')?.setAttribute('data-tone',tone);$('signalDetailsToggle')?.setAttribute('data-tone',tone);set('landscapeSignal',symbol+' '+(signal.direction===0?'待機':directionLabel(signal.direction))+' · '+signal.level);set('mobileSignalLevel',signal.level+' '+(level+1)+'/6');set('mobileScenario',pair?instrument+' · シミュレーション価格':'価格の生成方向：'+directionLabel(checkpoint.config.direction)+(running?' · 自動生成':' · 管理者設定'));const differs=!pair&&signal.direction!==checkpoint.config.direction;set('signalRelation','価格の生成方向は'+directionLabel(checkpoint.config.direction)+'、表示シグナルは'+(signal.direction===0?'待機':directionLabel(signal.direction))+'です。');if($('signalRelation'))$('signalRelation').hidden=!differs;set('signalCode',directionCode(signal.direction));set('signalDirection',signal.direction===0?'待機':directionLabel(signal.direction));$('signalCard')?.setAttribute('data-tone',signal.direction>0?'up':signal.direction<0?'down':'neutral');set('signalLevel',signal.level);set('signalFraction',`${level+1} / 6`);set('signalNote',signal.note);
  document.querySelectorAll('[data-mobile-level]').forEach(e=>{const current=Number(e.dataset.mobileLevel)===level;e.classList.toggle('active',current);e.classList.toggle('passed',Number(e.dataset.mobileLevel)<level);if(current)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current')});
  document.querySelectorAll('[data-level-bar]').forEach((e,i)=>e.classList.toggle('filled',i<=level));document.querySelectorAll('[data-level-label]').forEach(e=>{const current=Number(e.dataset.levelLabel)===level;e.classList.toggle('on',current);if(current)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current')});
  set('settingDirection',directionLabel(checkpoint.config.direction));set('settingSpeed',checkpoint.config.speed+'×');set('settingVolatility',checkpoint.config.volatility+' / 10');set('revision',record.version?'#'+String(record.version).padStart(4,'0'):'未同期');set('settingRevision',record.version?'#'+String(record.version).padStart(4,'0'):'未同期');set('updatedAt',record.updated_at?time(record.updated_at):'プレビュー');
- for(const [id,value] of Object.entries({metricRsi:calc.rsi,metricMacd:calc.macd,metricSma:calc.sma,metricEma:calc.ema,metricAtr:calc.atr,metricUpper:calc.band?.upper,metricLower:calc.band?.lower,metricSignal:calc.macdSignal}))set(id,number(value,id==='metricRsi'?1:3));
- const studyPanel=$('studyPanel');if(studyPanel){studyPanel.hidden=study==='none';set('chartIndicatorSummary',[ma?'MA20':null,bands?'BB':null,study==='none'?null:study.toUpperCase()].filter(Boolean).join(' · ')||'なし');if(study!=='none'){const series=studySeries(rows),sample=externalChart?(series.find(row=>row.time===selectionTime)||series.at(-1)):series.slice(-visibleCount)[hover??visibleCount-1]||series.at(-1);set('studyTitle',study==='rsi'?'RSI 14':'MACD 12,26,9');set('studyLegend',study==='rsi'?'基準線 30 / 50 / 70':'MACD / Signal / 差分');const value=study==='rsi'?number(sample.rsi,1):number(sample.macd);set('studyValue',value);const svg=$('studyChart');svg.setAttribute('viewBox',`0 0 ${width} 92`);svg.setAttribute('aria-description',study==='rsi'?'0から100の範囲、30・50・70の基準線を表示':'青線はMACD、黄線はシグナル線、棒はMACDとシグナル線の差分');svg.setAttribute('aria-label',(study==='rsi'?'RSI 14':'MACD 12,26,9')+' '+((externalChart?selectionTime===null:hover===null)?'最新':'選択足')+' '+value+(study==='macd'?'、シグナル線 '+number(sample.signal)+'、差分 '+number(sample.histogram):'')+'、ローソク足と同じ仮想データから計算');if(!externalChart)svg.innerHTML=studySvg(series,{kind:study,count:visibleCount,width,hover})}}const chart=$('chart');if(chart){chart.setAttribute('viewBox',`0 0 ${width} ${height}`);chart.dataset.count=String(visibleCount);chart.dataset.width=String(width);if(!externalChart)chart.innerHTML=chartSvg(rows,{ma,bands,hover,width,height,maxBars,tradeLevels,timeLabel:(running||marketView)?row=>{const ts=timestamp(row.time);return ts?shortTime(ts):'T'+row.time}:null})}set('visibleRange','直近'+visibleCount+'本を表示');const inspected=externalChart?selectionTime!==null:hover!==null,current=externalChart?(rows.find(row=>row.time===selectionTime)||last):data[hover??data.length-1]||last;const selectedAt=timestamp(current.time);set('selectedCandle',inspected?(selectedAt?shortTime(selectedAt)+' JST':'T'+current.time):'最新');set('axisTimeBasis',periodLabel?periodLabel+' · JST':running?'JST · 1本＝1ステップ':'生成順 · 1本＝1ステップ');$('followLatest')?.setAttribute('aria-pressed',String(hover===null));for(const k of ['open','high','low','close'])set('ohlc-'+k,number(current[k]));
+ for(const [id,value] of Object.entries({metricRsi:calc.rsi,metricMacd:calc.macd,metricSma:calc.sma,metricEma:calc.ema,metricAtr:calc.atr,metricUpper:calc.band?.upper,metricLower:calc.band?.lower,metricSignal:calc.macdSignal}))set(id,id==='metricRsi'?number(value,1):formatRate(value,instrument));
+ const studyPanel=$('studyPanel');if(studyPanel){studyPanel.hidden=study==='none';set('chartIndicatorSummary',[ma?'MA20':null,bands?'BB':null,study==='none'?null:study.toUpperCase()].filter(Boolean).join(' · ')||'なし');if(study!=='none'){const series=studySeries(rows),sample=externalChart?(series.find(row=>row.time===selectionTime)||series.at(-1)):series.slice(-visibleCount)[hover??visibleCount-1]||series.at(-1);set('studyTitle',study==='rsi'?'RSI 14':'MACD 12,26,9');set('studyLegend',study==='rsi'?'基準線 30 / 50 / 70':'MACD / Signal / 差分');const value=study==='rsi'?number(sample.rsi,1):number(sample.macd);set('studyValue',value);const svg=$('studyChart');svg.setAttribute('viewBox',`0 0 ${width} 92`);svg.setAttribute('aria-description',study==='rsi'?'0から100の範囲、30・50・70の基準線を表示':'青線はMACD、黄線はシグナル線、棒はMACDとシグナル線の差分');svg.setAttribute('aria-label',(study==='rsi'?'RSI 14':'MACD 12,26,9')+' '+((externalChart?selectionTime===null:hover===null)?'最新':'選択足')+' '+value+(study==='macd'?'、シグナル線 '+number(sample.signal)+'、差分 '+number(sample.histogram):'')+'、ローソク足と同じ仮想データから計算');if(!externalChart)svg.innerHTML=studySvg(series,{kind:study,count:visibleCount,width,hover})}}const chart=$('chart');if(chart){chart.setAttribute('viewBox',`0 0 ${width} ${height}`);chart.dataset.count=String(visibleCount);chart.dataset.width=String(width);if(!externalChart)chart.innerHTML=chartSvg(rows,{ma,bands,hover,width,height,maxBars,tradeLevels,instrument,timeLabel:(running||marketView)?row=>{const ts=timestamp(row.time);return ts?shortTime(ts):'T'+row.time}:null})}set('visibleRange','直近'+visibleCount+'本を表示');const inspected=externalChart?selectionTime!==null:hover!==null,current=externalChart?(rows.find(row=>row.time===selectionTime)||last):data[hover??data.length-1]||last;const selectedAt=timestamp(current.time);set('selectedCandle',inspected?(selectedAt?shortTime(selectedAt)+' JST':'T'+current.time):'最新');set('axisTimeBasis',periodLabel?periodLabel+' · JST':running?'JST · 1本＝1ステップ':'生成順 · 1本＝1ステップ');$('followLatest')?.setAttribute('aria-pressed',String(hover===null));for(const k of ['open','high','low','close'])set('ohlc-'+k,formatRate(current[k],instrument));
  const status=$('chartBarStatus');
  if(status){
   status.hidden=!marketView||inspected;
   if(marketView)set('chartBarStatus',marketView.running?(marketView.remaining?'確定まで '+marketView.remaining+'秒':'確定'):'停止中');
  }
- const tbody=$('candleRows');if(tbody)tbody.innerHTML=rows.slice(-10).reverse().map(c=>{const stamp=timestamp(c.time),label=stamp?`<time datetime="${stamp}" title="${stamp}">${shortTime(stamp)}</time>${marketView?(marketView.running&&marketView.remaining&&c===last?'<small class="bar-forming">形成中</small>':''):`<small class="step-reference">T${c.time}</small>`}`:'T'+String(c.time).padStart(3,'0');return `<tr><td class="mono">${label}</td><td>${number(c.open)}</td><td>${number(c.high)}</td><td>${number(c.low)}</td><td class="weight">${number(c.close)}</td><td class="${c.close>=c.open?'positive':'negative'}">${c.close>=c.open?'+':''}${number((c.close/c.open-1)*100,3)}%</td></tr>`}).join('');
+ const tbody=$('candleRows');if(tbody)tbody.innerHTML=rows.slice(-10).reverse().map(c=>{const stamp=timestamp(c.time),label=stamp?`<time datetime="${stamp}" title="${stamp}">${shortTime(stamp)}</time>${marketView?(marketView.running&&marketView.remaining&&c===last?'<small class="bar-forming">形成中</small>':''):`<small class="step-reference">T${c.time}</small>`}`:'T'+String(c.time).padStart(3,'0');return `<tr><td class="mono">${label}</td><td>${formatRate(c.open,instrument)}</td><td>${formatRate(c.high,instrument)}</td><td>${formatRate(c.low,instrument)}</td><td class="weight">${formatRate(c.close,instrument)}</td><td class="${c.close>=c.open?'positive':'negative'}">${c.close>=c.open?'+':''}${number((c.close/c.open-1)*100,3)}%</td></tr>`}).join('');
  set('announcementText',record.announcement);if($('announcement'))$('announcement').hidden=!record.announcement;
 }
 export function renderEvents(document,events){
