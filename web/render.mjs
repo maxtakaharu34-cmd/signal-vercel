@@ -19,6 +19,13 @@ function renderViewerQuote(element, price, split=true) {
 }
 const time=value=>value?new Date(value).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):'未公開';
 const shortTime=value=>new Date(value).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23'});
+function publicSignalNote(note) {
+ return String(note??'')
+  .replace('仮想価格の方向・一致度・継続性から判定。','価格の方向・一致度・継続性から判定。')
+  .replace('共通の仮想価格の勢い・方向指示・不規則な揺れから自動算出。','共通価格の勢い・方向指示・不規則な揺れから自動算出。')
+  .replace(/^共通の仮想シナリオの生成方向・移行度・値動きから自動算出しています。/,'共通シナリオの生成方向・移行度・値動きから自動算出しています。')
+  .replace(/^管理者が設定したシミュレーション用の参考シグナルです。$/,'管理者が設定した参考シグナルです。');
+}
 export function barTimestamp(checkpoint, time, marketView) {
  return marketView ? new Date(time * marketView.period * 1000).toISOString() : simulationTimestamp(checkpoint, time);
 }
@@ -76,7 +83,7 @@ export function renderScene(document,record,{ma=true,bands=false,study='none',ho
  const pair=instrument!==DEFAULT_INSTRUMENT;
  const pairEvidence=pair?instrumentSignalDiagnostics(checkpoint,instrument):null;
  const signal=pair?(pairEvidence?signalFromEvidence(pairEvidence):{direction:0,level:LEVELS[0],note:'時間足のデータ確認中。'}):record.signal;
- const signalNote=signal.note.replace('仮想価格の方向・一致度・継続性から判定。実際の市場予測ではありません。','価格の方向・一致度・継続性から判定。実際の市場予測ではありません。');
+ const signalNote=publicSignalNote(signal.note);
  const data=rows.slice(-visibleCount),last=rows.at(-1),change=quoteChange(rows,{base:changeBase,count:visibleCount}),calc=metrics(rows),level=LEVELS.indexOf(signal.level);
  const timestamp=time=>barTimestamp(checkpoint,time,marketView);
  const periodLabel=marketView?.period===60?'1分足':marketView?marketView.period+'秒足':null;
@@ -127,15 +134,17 @@ export function renderScene(document,record,{ma=true,bands=false,study='none',ho
  const tbody=$('candleRows');if(tbody)tbody.innerHTML=rows.slice(-10).reverse().map(c=>{const stamp=timestamp(c.time),label=stamp?`<time datetime="${stamp}" title="${stamp}">${shortTime(stamp)}</time>${marketView?(marketView.running&&marketView.remaining&&c===last?'<small class="bar-forming">形成中</small>':''):`<small class="step-reference">T${c.time}</small>`}`:'T'+String(c.time).padStart(3,'0');return `<tr><td class="mono">${label}</td><td>${formatRate(c.open,instrument)}</td><td>${formatRate(c.high,instrument)}</td><td>${formatRate(c.low,instrument)}</td><td class="weight">${formatRate(c.close,instrument)}</td><td class="${c.close>=c.open?'positive':'negative'}">${c.close>=c.open?'+':''}${number((c.close/c.open-1)*100,3)}%</td></tr>`}).join('');
  set('announcementText',record.announcement);if($('announcement'))$('announcement').hidden=!record.announcement;
 }
-export function renderEvents(document,events){
+export function renderEvents(document,events,{viewer=false}={}){
  const host=document.getElementById('eventList');if(!host)return;host.replaceChildren();
  if(!events?.length){const empty=document.createElement('p');empty.className='empty-state';empty.textContent='公開すると、変更内容がここに記録されます。';host.append(empty);return}
  for(const event of events){
   const item=document.createElement('div');item.className='timeline-item';const dot=document.createElement('span');dot.className='timeline-dot';
   const content=document.createElement('div'),label=document.createElement('p');label.className='timeline-label';label.textContent=String(event.label??'').replace(/^自動シミュレーションを停止$/,'自動生成を停止').replace(/^自動シミュレーションを/,'自動生成の方向を');
+  if(viewer)label.textContent=label.textContent.replace(/^仮想価格(?=を不規則モデルへ切替完了|の不規則モデルへの切替を予約)/,'価格');
   const details=document.createElement('small');details.textContent=time(event.created_at)+' · #'+event.version;content.append(label,details);
   const d=event.detail;if(d){const expand=document.createElement('details');expand.className='event-details';const summary=document.createElement('summary');summary.textContent='設定内容を見る';const list=document.createElement('dl');
-   const rows=[['シナリオ',d.config?directionLabel(d.config.direction)+' / 変動幅 '+d.config.volatility+' / 速度 '+d.config.speed+'×':'—'],['シグナル',d.signal?directionLabel(d.signal.direction)+' / '+d.signal.level:'—'],['補足',d.signal?.note||'なし'],['お知らせ',d.announcement||'なし'],['生成本数',d.total==null?'—':String(d.total)]];
+   const note=viewer?publicSignalNote(d.signal?.note):d.signal?.note;
+   const rows=[['シナリオ',d.config?directionLabel(d.config.direction)+' / 変動幅 '+d.config.volatility+' / 速度 '+d.config.speed+'×':'—'],['シグナル',d.signal?directionLabel(d.signal.direction)+' / '+d.signal.level:'—'],['補足',note||'なし'],['お知らせ',d.announcement||'なし'],['生成本数',d.total==null?'—':String(d.total)]];
    for(const [key,value] of rows){const row=document.createElement('div'),term=document.createElement('dt'),definition=document.createElement('dd');term.textContent=key;definition.textContent=value;row.append(term,definition);list.append(row)}expand.append(summary,list);content.append(expand)
   }
   item.append(dot,content);host.append(item)
