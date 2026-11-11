@@ -1,7 +1,10 @@
-import {createPaperOrderStore,closeSide,orderPrice,positionProfit,validOrderTrigger,ORDER_LABELS,ORDER_TYPES} from './paper-orders.mjs';
+import {createPaperOrderStore,closeSide,orderPrice,positionProfit,validOrderQuantity,validOrderTrigger,ORDER_LABELS,ORDER_TYPES} from './paper-orders.mjs';
 import {DEFAULT_INSTRUMENT,instrumentInfo,formatRate} from './instruments.mjs';
+import {DEMO_DEFAULT_LEVERAGE,isManaged,accountSnapshot,accountProfit,marginFor} from './demo-account.mjs';
 
 const clock = new Intl.DateTimeFormat('ja-JP', {timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+const yen=new Intl.NumberFormat('ja-JP',{maximumFractionDigits:0});
+const money=value=>value==null?'—':yen.format(value)+' 円';
 
 export function mountOrderPanel({document,window,getQuote,getScene,getInstrument,showTrades,notify,onOrdersChange}) {
  const $ = id => document.getElementById(id);
@@ -10,24 +13,26 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
  const quantity = $('orderQuantity');
  const orderType = $('orderType');
  const target = $('orderTarget');
+ const leverage = $('orderLeverage');
  const submit = $('orderSubmit');
  const store = createPaperOrderStore(window);
  const triggers = document.querySelectorAll('[data-order-side]');
  let action = null, busy = false, readId = 0, destroyed = false;
  let marks = [];
  let amendments = [];
- let currentOrders = {positions:[],pending:[]};
- let hasPending = false, matching = false, lastMatched = null;
+ let currentOrders = {positions:[],pending:[],account:null};
+ let needsMatching = false, matching = false, lastMatched = null;
  const channel = typeof window.BroadcastChannel === 'function' ? new window.BroadcastChannel('fx-demo-order-updates') : null;
 
  function matchLatest() {
   const scene = getScene();
-  if (!scene || !getQuote() || !hasPending || matching || lastMatched === scene || destroyed) return;
+  if (!scene || !getQuote() || !needsMatching || matching || lastMatched === scene || destroyed) return;
   lastMatched = scene;
   matching = true;
   void store.match(scene,Date.now()).then(async outcome=>{
-   if (destroyed || (!outcome.filled && !outcome.review)) return;
-   if (outcome.filled) notify(outcome.filled+'件のデモ注文が約定しました。');
+   if (destroyed || (!outcome.filled && !outcome.review && !outcome.liquidated)) return;
+   if (outcome.liquidated) notify(outcome.liquidated+'件の建玉をロスカットしました。');
+   else if (outcome.filled) notify(outcome.filled+'件のデモ注文が約定しました。');
    channel?.postMessage('changed');
    await refresh();
   }).catch(()=>{
@@ -51,21 +56,37 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
 
  function updateQuote() {
   const quote = getQuote();
+  const row=getScene()?.checkpoint.rows.at(-1);
+  const {account,positions,pending}=currentOrders;
+  const totals=account?accountSnapshot(account.balance,positions,pending,row):null;
+  for(const [id,key] of Object.entries({accountBalance:'balance',accountEquity:'equity',accountProfit:'profit',accountMargin:'margin',accountReserved:'reserved',accountAvailable:'available'}))set(id,money(totals?.[key]));
+  set('accountRatio',totals?.ratio==null?'—':(totals.ratio*100).toFixed(1)+'%');
   matchLatest();
   for (const trigger of triggers) trigger.disabled = !quote;
   for (const button of amendments) button.disabled = !quote;
   for (const {position, value, button} of marks) {
    const instrument=position.instrument??DEFAULT_INSTRUMENT,mark=getQuote(instrument);
    button.disabled = !mark;
-   const profit = mark ? positionProfit(position, orderPrice(closeSide(position.side), mark)) : null;
-   value.textContent = profit === null ? '—' : formatRate(profit,instrument,true) + ' pt';
+   const exit=mark?orderPrice(closeSide(position.side),mark):null;
+   const profit=exit===null?null:isManaged(position)?accountProfit(position,exit,row.time):positionProfit(position,exit);
+   value.textContent=profit===null?'—':isManaged(position)?(profit>0?'+':'')+money(profit):formatRate(profit,instrument,true)+' pt';
    value.dataset.profit = profit > 0 ? 'up' : profit < 0 ? 'down' : 'neutral';
   }
   if (!action || !dialog.open) return;
   const live=getQuote(action.instrument),price=live?orderPrice(action.side,live):null;
   set('orderRate',formatRate(price,action.instrument));
   if (action.position) {
-   set('orderProfit', price === null ? '—' : formatRate(positionProfit(action.position,price),action.instrument,true) + ' pt');
+   const {position}=action;
+   set('orderProfit',price===null?'—':isManaged(position)?money(accountProfit(position,price,row.time)):formatRate(positionProfit(position,price),action.instrument,true)+' pt');
+  }
+  if(!$('orderMarginInfo').hidden){
+   const orderPrice=orderType.value==='market'?price:target.valueAsNumber;
+   const required=live&&validOrderQuantity(quantity.valueAsNumber)&&orderPrice>0?
+    marginFor({instrument:action.instrument,quantity:quantity.valueAsNumber,leverage:Number(leverage.value)},orderPrice,row.time):null;
+   const available=totals?totals.available+(isManaged(action.pending??{})?action.pending.margin:0):null;
+   set('orderMargin',money(required));
+   set('orderAvailable',money(available));
+   $('orderFundsMessage').hidden=required===null||available===null||required<=available;
   }
   $('orderNoQuote').hidden = !!live;
   submit.disabled = busy || !live;
@@ -83,6 +104,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   }
   set('orderNote',conditional?'条件を満たした仮想レートで約定します。このブラウザーの価格同期時に照合します。':'注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。');
   $('orderError').hidden=true;
+  updateQuote();
  }
 
  function open(side, {position=null,pending=null,fromChart=false}={}) {
@@ -104,6 +126,13 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   target.value = pending ? String(pending.target) : '';
   quantity.value = String(position?.quantity ?? pending?.quantity ?? 1);
   quantity.readOnly = !!position || !!pending;
+  set('orderUnits',instrument===DEFAULT_INSTRUMENT?'1単位＝1指数単位':position&&!isManaged(position)||pending&&!isManaged(pending)?'従来の数量単位':'1単位＝0.01 BTC');
+  const usesMargin=!position&&(!pending||isManaged(pending));
+  $('orderLeverageRow').hidden=!usesMargin;
+  $('orderMarginInfo').hidden=!usesMargin;
+  $('orderFundsMessage').hidden=true;
+  leverage.value=String(pending?.leverage??DEMO_DEFAULT_LEVERAGE);
+  leverage.disabled=!!pending;
   submit.textContent = position ? '決済を確定' : pending ? '変更を確定' : ORDER_LABELS[side] + '注文を確定';
   submit.dataset.side = side;
   updateOrderType();
@@ -119,13 +148,13 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   return position ? open(closeSide(position.side),{position,fromChart:true}) : false;
  }
 
- function render({positions,pending}) {
-  currentOrders={positions,pending};
-  hasPending=pending.some(order=>order.status==='pending');
+ function render({positions,pending,account}) {
+  currentOrders={positions,pending,account};
+  needsMatching=pending.some(order=>order.status==='pending')||positions.some(position=>!position.close&&isManaged(position));
   const openPositions = positions.filter(position => !position.close).sort((a,b)=>b.open.time-a.open.time);
   const fills = positions.flatMap(position => [
    {side:position.side,quantity:position.quantity,instrument:position.instrument,kind:position.type?'新規 '+ORDER_TYPES[position.type]:'新規',...position.open},
-   ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,instrument:position.instrument,kind:'決済',profit:positionProfit(position,position.close.price),...position.close}] : []),
+   ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,instrument:position.instrument,kind:position.close.reason==='liquidation'?'ロスカット':'決済',profit:positionProfit(position,position.close.price),cash:isManaged(position),...position.close}] : []),
   ]).sort((a,b)=>b.time-a.time).slice(0,50);
 
   amendments=[];
@@ -135,7 +164,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    side.dataset.side=order.side;
    const info=element('span','','order-entry');
    info.append(element('small',instrumentInfo(order.instrument).label),element('b',formatRate(order.target,order.instrument),'mono'),element('small',ORDER_TYPES[order.type]+' · 数量 '+order.quantity));
-   const status=element('span',order.status==='review'?'履歴不足 · 停止':'待機中','order-pending-status');
+   const status=element('span',({review:'履歴不足 · 停止',funds:'証拠金不足',liquidation:'ロスカット取消'})[order.status]??'待機中','order-pending-status');
    status.dataset.state=order.status;
    const button=element('button','取消','order-close-position');
    button.type='button';
@@ -188,12 +217,13 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    info.append(element('small',instrumentInfo(fill.instrument).label),element('b',formatRate(fill.price,fill.instrument),'mono'),element('small',fill.kind+' · 数量 '+fill.quantity));
    const time = element('span','','order-entry order-fill-time');
    time.append(element('time',clock.format(fill.time),'mono'));
-   if (fill.profit !== undefined) time.append(element('small',formatRate(fill.profit,fill.instrument,true)+' pt','mono'));
+   if (fill.profit !== undefined) time.append(element('small',fill.cash?money(fill.profit):formatRate(fill.profit,fill.instrument,true)+' pt','mono'));
    row.append(side,info,time);
    return row;
   }));
   $('orderEmptyPositions').hidden = openPositions.length > 0;
   $('orderEmptyHistory').hidden = fills.length > 0;
+  $('legacyTradeNote').hidden=!openPositions.some(position=>!isManaged(position));
   onOrdersChange(currentOrders);
   updateQuote();
  }
@@ -226,26 +256,27 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   }
   const price = orderPrice(side,quote),time = Date.now();
   const scene=getScene();
+  const selectedLeverage=Number(leverage.value);
   busy = true;
   $('orderDialogClose').disabled = true;
   $('orderError').hidden = true;
   updateQuote();
   try {
-   if (position) await store.close(position.id,quote,time);
-   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time,instrument});
+   await store.match(scene,time);
+   if (position) await store.close(position.id,quote,time,scene);
+   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time,instrument,leverage:selectedLeverage,scene});
    else{
     const row=scene.checkpoint.rows.at(-1),cursor={time:row.time,close:row.close,version:scene.version};
     if(pending){
-     await store.match(scene,time);
-     await store.amend(pending.id,{target:condition,cursor});
-    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time,instrument});
+     await store.amend(pending.id,{target:condition,cursor,scene});
+    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time,instrument,leverage:selectedLeverage,scene});
     lastMatched=null;
    }
   } catch(error) {
-   const errors=['この建玉はすでに決済されています。','変更できる未約定注文がありません。取引画面で状態を確認してください。','価格が更新されました。レートを確認してください。'];
+   const errors=['この建玉はすでに決済されています。','変更できる未約定注文がありません。取引画面で状態を確認してください。','価格が更新されました。レートを確認してください。','余力が不足しています。数量またはレバレッジを確認してください。'];
    set('orderError',errors.includes(error.message)?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
    $('orderError').hidden = false;
-   if(pending){channel?.postMessage('changed');void refresh();}
+   channel?.postMessage('changed');void refresh();
    return;
   } finally {
    busy = false;
@@ -259,6 +290,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   else showTrades();
  };
  orderType.onchange=updateOrderType;
+ quantity.oninput=target.oninput=leverage.onchange=updateQuote;
  $('orderDialogClose').onclick = () => dialog.close();
  const cancel = event => {if (busy) event.preventDefault();};
  dialog.addEventListener('cancel',cancel);

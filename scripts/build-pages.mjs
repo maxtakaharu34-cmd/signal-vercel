@@ -1,5 +1,6 @@
 import {mkdirSync,writeFileSync,copyFileSync} from 'node:fs';
 import {INSTRUMENTS} from '../web/instruments.mjs';
+import {DEMO_LEVERAGES,DEMO_DEFAULT_LEVERAGE} from '../web/demo-account.mjs';
 const icons={orders:'<path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/>',close:'<path d="m6 6 12 12M6 18 18 6"/>',expand:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>',left:'<path d="m15 5-7 7 7 7"/>',chart:'<path d="M3 3v18h18M6 14l4-5 4 3 6-8"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',history:'<path d="M3 11a9 9 0 1 1 3 8M3 4v7h7M12 7v5l3 2"/>',settings:'<path d="M4 7h16M4 17h16M8 4v6M16 14v6"/>',arrow:'<path d="M7 17 17 7M7 7h10v10"/>',download:'<path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/>',lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',person:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/>',check:'<path d="m5 12 4 4L19 6"/>',refresh:'<path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 13 2M5 15a7 7 0 0 0 13 2"/>',right:'<path d="m9 5 7 7-7 7"/>',logout:'<path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h10"/>'};
 const icon=(name,cls='')=>`<svg class="icon ${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[name]}</svg>`;
 const instrumentSelector=()=>`<select class="instrument-select" data-instrument-select aria-label="銘柄">${INSTRUMENTS.map(({id,label})=>`<option value="${id}">${label}</option>`).join('')}</select>`;
@@ -35,17 +36,28 @@ const orderDialog=()=>`<dialog class="display-menu-dialog order-dialog" id="orde
    <div id="orderProfitRow" hidden><dt>決済損益の目安</dt><dd class="mono" id="orderProfit">—</dd></div>
   </dl>
   <label class="order-quantity" id="orderTargetRow" hidden>指定レート<input id="orderTarget" type="number" inputmode="decimal" min="0.001" step="0.001" aria-describedby="orderTargetHelp" disabled><small id="orderTargetHelp"></small></label>
-  <label class="order-quantity">数量（デモ単位）<input id="orderQuantity" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1" required></label>
+  <div class="order-inputs">
+   <label class="order-quantity">数量（デモ単位）<input id="orderQuantity" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1" required><small id="orderUnits"></small></label>
+   <label class="order-quantity" id="orderLeverageRow">レバレッジ<select id="orderLeverage">${DEMO_LEVERAGES.map(value=>`<option value="${value}"${value===DEMO_DEFAULT_LEVERAGE?' selected':''}>${value}倍</option>`).join('')}</select></label>
+  </div>
+  <dl class="order-facts" id="orderMarginInfo"><div><dt>必要証拠金（目安）</dt><dd class="mono" id="orderMargin">—</dd></div><div><dt>取引余力</dt><dd class="mono" id="orderAvailable">—</dd></div></dl>
+  <p class="order-error" id="orderFundsMessage" hidden>余力が不足しています。数量またはレバレッジを確認してください。</p>
   <p class="order-note" id="orderNote">注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。</p>
   <p class="order-error" id="orderNoQuote" role="status" hidden>価格の同期を待っています。</p>
   <p class="order-error" id="orderError" role="alert" hidden></p>
-  <button class="order-side-button order-submit" id="orderSubmit" type="submit">注文を確定</button>
+  <div class="order-submit-bar"><button class="order-side-button order-submit" id="orderSubmit" type="submit">注文を確定</button></div>
  </form>
 </dialog>`;
 
 const orderHistory=()=>`<section class="panel orders-panel" id="trades">
  <div class="panel-heading"><h2>デモ取引</h2><span class="caption">このブラウザーに保存</span></div>
  <p id="ordersStatus" class="order-error" role="status" hidden></p>
+ <section class="orders-section" aria-labelledby="demoAccountTitle">
+  <div class="order-section-heading"><h3 id="demoAccountTitle">仮想口座</h3><span>デモ円</span></div>
+  <dl class="account-summary">${[['accountBalance','残高'],['accountEquity','有効証拠金'],['accountProfit','評価損益'],['accountMargin','必要証拠金'],['accountReserved','注文中証拠金'],['accountAvailable','取引余力'],['accountRatio','証拠金維持率']].map(([id,label])=>`<div><dt>${label}</dt><dd class="mono" id="${id}">—</dd></div>`).join('')}</dl>
+  <p class="order-note">維持率50%以下で保有建玉をロスカットします。決済後の不足額に対する追加証拠金はありません。</p>
+  <p class="order-note" id="legacyTradeNote" hidden>口座追加前の建玉は、従来のポイント方式で決済できます。</p>
+ </section>
  <section class="orders-section" aria-labelledby="orderPendingTitle">
   <div class="order-section-heading"><h3 id="orderPendingTitle">未約定注文</h3><span>取消まで有効</span></div>
   <p class="empty-state" id="orderEmptyPending">未約定注文はありません。</p>
