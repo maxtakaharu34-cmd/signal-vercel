@@ -5,6 +5,7 @@ import {simulationTimestamp} from './timeline.mjs';
 
 const timeFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const minuteFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
+const EMPTY_LEVELS=[];
 export function candleTimeLabel(checkpoint,time){const stamp=simulationTimestamp(checkpoint,time);return stamp?timeFormat.format(new Date(stamp)):'T'+time}
 
 // Absolute candle IDs survive a rolling 120-bar buffer and scenario re-anchors.
@@ -18,7 +19,7 @@ export function resolveChartWindow(rows,{range=null,following=true,count=36,rese
  return {from,to:from+span};
 }
 
-export function createTerminalChart({element,window,onInspect=()=>{},onViewport=()=>{},library=LightweightCharts}){
+export function createTerminalChart({element,window,onInspect=()=>{},onViewport=()=>{},onTradeLevel=()=>{},library=LightweightCharts}){
  // Keep the SVG renderer as an explicit compatibility fallback. DOM-only tests
  // do not claim to exercise Canvas; adapter tests inject a chart API separately.
  if(library===LightweightCharts&&!window.CanvasRenderingContext2D)return null;
@@ -53,6 +54,30 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  const upper=chart.addSeries(LineSeries,{...lineOptions,color:'#9cacc1',lineStyle:LineStyle.Dashed});
  const lower=chart.addSeries(LineSeries,{...lineOptions,color:'#9cacc1',lineStyle:LineStyle.Dashed});
  let studies=[];
+ let visibleLevels=EMPTY_LEVELS;
+ let orderPriceLines=[];
+ function updateTradeLevels(levels){
+  if(visibleLevels===levels)return;
+  for(const line of orderPriceLines)price.removePriceLine(line);
+  visibleLevels=levels;
+  orderPriceLines=levels.map(level=>price.createPriceLine({
+   id:level.id,price:level.price,color:level.color,title:level.title,lineWidth:1,
+   lineStyle:level.kind==='position'?LineStyle.Solid:level.kind==='limit'?LineStyle.Dashed:LineStyle.Dotted,
+  }));
+ }
+ function inspectTradeLevel(event){
+  if(!visibleLevels.length||event.paneIndex>0||!event.point)return;
+  const hit=visibleLevels.find(level=>level.id===event.hoveredInfo?.objectId);
+  if(hit){onTradeLevel(hit.ids);return;}
+  let nearest=null, distance=7;
+  for(const level of visibleLevels){
+   const y=price.priceToCoordinate(level.price);
+   if(y===null||y<0||y>chart.paneSize(0).height)continue;
+   const delta=Math.abs(y-event.point.y);
+   if(delta<distance){nearest=level;distance=delta;}
+  }
+  if(nearest)onTradeLevel(nearest.ids);
+ }
  function palette(colors){return colors==='intl'?{up:'#16866b',down:'#d34c59'}:{up:'#de5149',down:'#327cc5'}}
  function configureStudy(kind){
   if(kind===previousStudy)return;
@@ -78,8 +103,8 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
   const time=rows.some(row=>row.time===key)?key:null;
   if(time===selected)return;selected=time;onInspect(time);
  };
- chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);chart.subscribeCrosshairMove(onCrosshair);
- function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null,chartRows=null}){
+ chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);chart.subscribeCrosshairMove(onCrosshair);chart.subscribeClick(inspectTradeLevel);
+ function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null,chartRows=null,tradeLevels=EMPTY_LEVELS}){
   if(destroyed)return;
   record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=chartRows??marketView?.rows??next.checkpoint.rows;
   const nextPeriod=marketView?.period??null;
@@ -106,6 +131,7 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
     lastData=JSON.stringify(rows);
    }
    if(periodChanged)chart.timeScale().applyOptions({secondsVisible:period!==60,tickMarkMaxCharacterLength:period===60?5:8});
+   updateTradeLevels(tradeLevels);
    if(savedRange&&(dataChanged||reset||studyChanged)){
     range=savedRange;if(reset)following=true;
     chart.timeScale().setVisibleLogicalRange({from:range.from-rows[0].time,to:range.to-rows[0].time});
@@ -118,5 +144,5 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
   }finally{writing=false}
   viewport();
  }
- return {update,follow(){following=true;range=null;previousCount=null;selected=null;writing=true;try{chart.clearCrosshairPosition()}finally{writing=false}},state:()=>({following,range:range&&{...range},selectionTime:selected}),destroy(){if(destroyed)return;destroyed=true;chart.unsubscribeCrosshairMove(onCrosshair);chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);chart.remove()}};
+ return {update,follow(){following=true;range=null;previousCount=null;selected=null;writing=true;try{chart.clearCrosshairPosition()}finally{writing=false}},state:()=>({following,range:range&&{...range},selectionTime:selected}),destroy(){if(destroyed)return;destroyed=true;chart.unsubscribeClick(inspectTradeLevel);chart.unsubscribeCrosshairMove(onCrosshair);chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);chart.remove()}};
 }

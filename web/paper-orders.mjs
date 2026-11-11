@@ -40,7 +40,12 @@ export function validOrderTrigger(side,type,target,quote) {
 }
 
 export function matchPendingOrder(order,reader) {
- const {last,first,closeAt} = reader;
+ const {last,first,closeAt,version} = reader;
+ const cursorVersion=order.cursor.version;
+ if(Number.isSafeInteger(version)&&Number.isSafeInteger(cursorVersion)&&
+    (version<cursorVersion || version===cursorVersion&&last<order.cursor.time)){
+  return {status:'pending',cursor:order.cursor};
+ }
  const previous = closeAt(order.cursor.time);
  if (last < order.cursor.time || first > order.cursor.time+1 || last-order.cursor.time > MAX_REPLAY_STEPS ||
      (previous !== null && Math.abs(previous-order.cursor.close)>1e-9)) return {status:'review'};
@@ -50,7 +55,9 @@ export function matchPendingOrder(order,reader) {
   const price = orderPrice(order.side,quotePair(close));
   if (triggerReached(order.side,order.type,order.target,price)) return {status:'filled',price,step};
  }
- return {status:'pending',cursor:{time:last,close:closeAt(last)}};
+ const cursor={time:last,close:closeAt(last)};
+ if(Number.isSafeInteger(version))cursor.version=version;
+ return {status:'pending',cursor};
 }
 
 // IndexedDB keeps the read/check/write of a close in one transaction. Two tabs
@@ -134,10 +141,27 @@ export function createPaperOrderStore(window) {
     table.delete(id);
    };
   }),
-  match:(checkpoint,time) => transaction([POSITIONS,PENDING],'readwrite',(tx,complete)=>{
+  amend:(id,{target,cursor}) => transaction(PENDING,'readwrite',(tx,_complete,abort)=>{
+   const table=tx.objectStore(PENDING),request=table.get(id);
+   request.onsuccess=()=>{
+    const order=request.result;
+    if(!order||order.status!=='pending'){
+     abort(Error('変更できる未約定注文がありません。取引画面で状態を確認してください。'));
+     return;
+    }
+    if(!validOrderTrigger(order.side,order.type,target,quotePair(cursor.close))){
+     abort(Error('指定レートを確認してください。'));
+     return;
+    }
+    // The order may have been checked in another tab after this quote was read.
+    if(order.cursor.time>cursor.time||order.cursor.version>cursor.version){abort(Error('価格が更新されました。レートを確認してください。'));return;}
+    table.put({...order,target,cursor});
+   };
+  }),
+  match:({checkpoint,version},time) => transaction([POSITIONS,PENDING],'readwrite',(tx,complete)=>{
    const pending=tx.objectStore(PENDING),positions=tx.objectStore(POSITIONS),request=pending.getAll();
    request.onsuccess=()=>{
-    const reader=createExecutionPriceReader(checkpoint);
+    const reader={...createExecutionPriceReader(checkpoint),version};
     let filled=0,review=0;
     for(const order of request.result){
      if(order.status!=='pending')continue;
@@ -152,7 +176,7 @@ export function createPaperOrderStore(window) {
      }else if(outcome.status==='review'){
       pending.put({...order,status:'review'});
       review++;
-     }else if(outcome.cursor.time!==order.cursor.time){
+     }else if(outcome.cursor.time!==order.cursor.time||outcome.cursor.version!==order.cursor.version){
       pending.put({...order,cursor:outcome.cursor});
      }
     }

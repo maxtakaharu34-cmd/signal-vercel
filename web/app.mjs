@@ -3,6 +3,7 @@ import {validAutomation,newerFrame,createMarketBarReader} from './timeline.mjs';
 import {CHART_PERIODS,marketClock} from './market-bars.mjs';
 import {QUOTE_SIDES,quoteCandles,quotePair} from './market-quotes.mjs';
 import {mountOrderPanel} from './order-panel.mjs';
+import {tradeLevels} from './trade-levels.mjs';
 import {createSiteClient} from './site-client.mjs';
 import {createEngine,initialCheckpoint,DEFAULT_SIGNAL,validateScene} from './engine.mjs';
 import {renderScene,renderEvents,chartHitIndex,barTimestamp} from './render.mjs';
@@ -21,14 +22,17 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  let chartRows = null;
  let chartFrame = null;
  let orderPanel = null;
+ let orderData = {positions:[],pending:[]};
+ let orderLevels = [];
  const displayRows = () => chartRows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
  const savePreferences=()=>saveDisplayPreferences(window,{...preferences,maxBars,changeBase,ma,bands,study});
+ function updateOrderLevels(){orderLevels=tradeLevels(orderData,preferences);paint();}
  if(!adminPage){document.documentElement.dataset.colors=preferences.colors;if($('colorConvention'))$('colorConvention').value=preferences.colors;if($('changeBase'))$('changeBase').value=changeBase;if($('showMa'))$('showMa').checked=ma;if($('showBands'))$('showBands').checked=bands;if($('chartStudy'))$('chartStudy').value=study;}
  const setText=(id,value)=>{const element=$(id);if(element&&element.textContent!==String(value))element.textContent=value};
  let chartController=null;
  if(!adminPage&&$('tradeChart')){
   $('tradeChart').hidden=false;
-  try{chartController=chartFactory({element:$('tradeChart'),window,onInspect(time){if(time===selectedTime)return;selectedTime=time;paint()},onViewport({following,range}){setText('chartRangeStatus',following?'保持範囲：最新120本':'過去の足を表示中 · 最大120本');$('followLatest')?.setAttribute('aria-pressed',String(following&&selectedTime===null));renderBarPresets(range)}})}catch(error){window.console?.error('Interactive chart unavailable',error);setText('chartRangeStatus','簡易チャート表示')}
+  try{chartController=chartFactory({element:$('tradeChart'),window,onTradeLevel(ids){if(ids.length!==1||!orderPanel?.selectLevel(ids[0]))openView('trades')},onInspect(time){if(time===selectedTime)return;selectedTime=time;paint()},onViewport({following,range}){setText('chartRangeStatus',following?'保持範囲：最新120本':'過去の足を表示中 · 最大120本');$('followLatest')?.setAttribute('aria-pressed',String(following&&selectedTime===null));renderBarPresets(range)}})}catch(error){window.console?.error('Interactive chart unavailable',error);setText('chartRangeStatus','簡易チャート表示')}
   $('tradeChart').hidden=!chartController;$('chart').hidden=!!chartController;$('chart').toggleAttribute('hidden',!!chartController);document.body.dataset.chartEngine=chartController?'canvas':'svg';
  }
  const connection=(label,state='online')=>{setText('connectionLabel',label);$('connection').dataset.state=state};
@@ -78,8 +82,8 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
     }
    }
    if(selectedTime!==null){const width=$('chart')?.getBoundingClientRect().width||960,rows=displayRows(),visible=chartController?rows:rows.slice(-(maxBars??(width<600?36:72))),index=visible.findIndex(row=>row.time===selectedTime);hover=index>=0?index:null;if(index<0)selectedTime=null;}
-   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView,chartRows,side:preferences.side});
-   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView,chartRows});
+   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView,chartRows,side:preferences.side,tradeLevels:orderLevels});
+   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView,chartRows,tradeLevels:orderLevels});
   }else if(!adminPage){
    marketView=null;chartRows=null;chartFrame=null;$('chartPeriod').hidden=true;
    for(const id of ['quote','mobileQuote','mobilePriceChange','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');
@@ -214,6 +218,12 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  }
  document.querySelectorAll('[data-price-side]').forEach(button=>button.onclick=()=>selectRate(button.dataset.priceSide));
  if ($('chartRate')) $('chartRate').onchange = event => selectRate(event.target.value);
+ for(const [id,key] of [['showOrderLines','orderLines'],['showPositionLines','positionLines']]){
+  const input=$(id);
+  if(!input)continue;
+  input.checked=preferences[key];
+  input.onchange=()=>{preferences[key]=input.checked;savePreferences();updateOrderLevels();};
+ }
  const closeMenu=event=>{const menu=$('displayMenu');if(menu&&event.target===menu){const r=menu.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)menu.close()}};document.addEventListener('click',closeMenu);
  if($('displayMenuOpen'))$('displayMenuOpen').onclick=()=>$('displayMenu').showModal();
  if($('displayMenuClose'))$('displayMenuClose').onclick=()=>$('displayMenu').close();
@@ -242,6 +252,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    getQuote:()=>ready&&document.body.dataset.stale==='false'?quotePair(published.checkpoint.rows.at(-1).close):null,
    getScene:()=>ready?published:null,
    showTrades:()=>openView('trades'),
+   onOrdersChange:orders=>{orderData=orders;updateOrderLevels();},
    notify:toast,
   });
  }

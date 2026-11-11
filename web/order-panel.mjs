@@ -4,7 +4,7 @@ const number = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFr
 const signed = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFractionDigits:3,signDisplay:'exceptZero'});
 const clock = new Intl.DateTimeFormat('ja-JP', {timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 
-export function mountOrderPanel({document,window,getQuote,getScene,showTrades,notify}) {
+export function mountOrderPanel({document,window,getQuote,getScene,showTrades,notify,onOrdersChange}) {
  const $ = id => document.getElementById(id);
  const dialog = $('orderDialog');
  const form = $('orderForm');
@@ -16,6 +16,8 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
  const triggers = document.querySelectorAll('[data-order-side]');
  let action = null, busy = false, readId = 0, destroyed = false;
  let marks = [];
+ let amendments = [];
+ let currentOrders = {positions:[],pending:[]};
  let hasPending = false, matching = false, lastMatched = null;
  const channel = typeof window.BroadcastChannel === 'function' ? new window.BroadcastChannel('fx-demo-order-updates') : null;
 
@@ -24,7 +26,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   if (!scene || !getQuote() || !hasPending || matching || lastMatched === scene || destroyed) return;
   lastMatched = scene;
   matching = true;
-  void store.match(scene.checkpoint,Date.now()).then(async outcome=>{
+  void store.match(scene,Date.now()).then(async outcome=>{
    if (destroyed || (!outcome.filled && !outcome.review)) return;
    if (outcome.filled) notify(outcome.filled+'件のデモ注文が約定しました。');
    channel?.postMessage('changed');
@@ -52,6 +54,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   const quote = getQuote();
   matchLatest();
   for (const trigger of triggers) trigger.disabled = !quote;
+  for (const button of amendments) button.disabled = !quote;
   for (const {position, value, button} of marks) {
    button.disabled = !quote;
    const profit = quote ? positionProfit(position, orderPrice(closeSide(position.side), quote)) : null;
@@ -82,28 +85,38 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   $('orderError').hidden=true;
  }
 
- function open(side, position=null) {
-  if (!getQuote() || dialog.open) return;
-  action = {side, position};
-  $('orderDialogTitle').textContent = position ? 'デモ決済' : 'デモ注文';
+ function open(side, {position=null,pending=null,fromChart=false}={}) {
+  if (!getQuote() || dialog.open) return false;
+  action = {side, position, pending, fromChart};
+  $('orderDialogTitle').textContent = position ? 'デモ決済' : pending ? 'デモ注文の変更' : 'デモ注文';
   $('orderDirection').textContent = ORDER_LABELS[side];
   $('orderDirection').dataset.side = side;
   $('orderRateType').textContent = side === 'buy' ? '買値（Ask）' : '売値（Bid）';
   $('orderProfitRow').hidden = !position;
   $('orderTypeRow').hidden = !!position;
   $('orderCloseType').hidden = !position;
-  orderType.value = 'market';
-  target.value = '';
-  quantity.value = String(position?.quantity ?? 1);
-  quantity.readOnly = !!position;
-  submit.textContent = position ? '決済を確定' : ORDER_LABELS[side] + '注文を確定';
+  orderType.value = pending?.type ?? 'market';
+  orderType.disabled = !!pending;
+  target.value = pending ? String(pending.target) : '';
+  quantity.value = String(position?.quantity ?? pending?.quantity ?? 1);
+  quantity.readOnly = !!position || !!pending;
+  submit.textContent = position ? '決済を確定' : pending ? '変更を確定' : ORDER_LABELS[side] + '注文を確定';
   submit.dataset.side = side;
   updateOrderType();
   dialog.showModal();
   updateQuote();
+  return true;
+ }
+
+ function selectLevel(id) {
+  const pending=currentOrders.pending.find(order=>order.id===id && order.status==='pending');
+  if(pending)return open(pending.side,{pending,fromChart:true});
+  const position=currentOrders.positions.find(order=>order.id===id && !order.close);
+  return position ? open(closeSide(position.side),{position,fromChart:true}) : false;
  }
 
  function render({positions,pending}) {
+  currentOrders={positions,pending};
   hasPending=pending.some(order=>order.status==='pending');
   const openPositions = positions.filter(position => !position.close).sort((a,b)=>b.open.time-a.open.time);
   const fills = positions.flatMap(position => [
@@ -111,7 +124,8 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,kind:'決済',profit:positionProfit(position,position.close.price),...position.close}] : []),
   ]).sort((a,b)=>b.time-a.time).slice(0,50);
 
-  $('orderPending').replaceChildren(...pending.sort((a,b)=>b.time-a.time).map(order=>{
+  amendments=[];
+  $('orderPending').replaceChildren(...[...pending].sort((a,b)=>b.time-a.time).map(order=>{
    const row=element('li','','order-pending');
    const side=element('b',ORDER_LABELS[order.side],'order-direction');
    side.dataset.side=order.side;
@@ -125,13 +139,24 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    button.onclick=async()=>{
     button.disabled=true;
     try{
+     if(getQuote())await store.match(getScene(),Date.now());
      await store.cancel(order.id);
      notify('デモ注文を取り消しました。');
      channel?.postMessage('changed');
     }catch(error){notify(error.message);}
     await refresh();
    };
-   row.append(side,info,status,button);
+   const actions=element('span','','order-row-actions');
+   if(order.status==='pending'){
+    const edit=element('button','変更','order-close-position');
+    edit.type='button';
+    edit.setAttribute('aria-label',ORDER_LABELS[order.side]+ORDER_TYPES[order.type]+'注文を変更');
+    edit.onclick=()=>open(order.side,{pending:order});
+    actions.append(edit);
+    amendments.push(edit);
+   }
+   actions.append(button);
+   row.append(side,info,status,actions);
    return row;
   }));
   $('orderEmptyPending').hidden=pending.length>0;
@@ -146,7 +171,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    const button = element('button','決済','order-close-position');
    button.type = 'button';
    button.setAttribute('aria-label',ORDER_LABELS[position.side]+'建玉を決済');
-   button.onclick = () => open(closeSide(position.side),position);
+   button.onclick = () => open(closeSide(position.side),{position});
    row.append(side,entry,value,button);
    marks.push({position,value,button});
    return row;
@@ -165,6 +190,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   }));
   $('orderEmptyPositions').hidden = openPositions.length > 0;
   $('orderEmptyHistory').hidden = fills.length > 0;
+  onOrdersChange(currentOrders);
   updateQuote();
  }
 
@@ -186,7 +212,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
   event.preventDefault();
   const quote = getQuote();
   if (busy || !action || !quote || !form.reportValidity()) return;
-  const {side,position} = action;
+  const {side,position,pending,fromChart} = action;
   const type=position?'market':orderType.value;
   const condition=target.valueAsNumber;
   if(type!=='market'&&!validOrderTrigger(side,type,condition,quote)){
@@ -195,6 +221,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    return;
   }
   const price = orderPrice(side,quote),time = Date.now();
+  const scene=getScene();
   busy = true;
   $('orderDialogClose').disabled = true;
   $('orderError').hidden = true;
@@ -203,13 +230,18 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    if (position) await store.close(position.id,quote,time);
    else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time});
    else{
-    const row=getScene().checkpoint.rows.at(-1);
-    await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor:{time:row.time,close:row.close},time});
+    const row=scene.checkpoint.rows.at(-1),cursor={time:row.time,close:row.close,version:scene.version};
+    if(pending){
+     await store.match(scene,time);
+     await store.amend(pending.id,{target:condition,cursor});
+    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time});
     lastMatched=null;
    }
   } catch(error) {
-   set('orderError',error.message==='この建玉はすでに決済されています。'?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
+   const errors=['この建玉はすでに決済されています。','変更できる未約定注文がありません。取引画面で状態を確認してください。','価格が更新されました。レートを確認してください。'];
+   set('orderError',errors.includes(error.message)?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
    $('orderError').hidden = false;
+   if(pending){channel?.postMessage('changed');void refresh();}
    return;
   } finally {
    busy = false;
@@ -217,9 +249,10 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
    updateQuote();
   }
   dialog.close();
-  notify(type==='market'?(position?'決済':ORDER_LABELS[side]+'注文')+'が約定しました。':ORDER_TYPES[type]+'注文を受け付けました。');
+  notify(pending?'指定レートを変更しました。':type==='market'?(position?'決済':ORDER_LABELS[side]+'注文')+'が約定しました。':ORDER_TYPES[type]+'注文を受け付けました。');
   channel?.postMessage('changed');
-  showTrades();
+  if(fromChart)void refresh();
+  else showTrades();
  };
  orderType.onchange=updateOrderType;
  $('orderDialogClose').onclick = () => dialog.close();
@@ -230,5 +263,5 @@ export function mountOrderPanel({document,window,getQuote,getScene,showTrades,no
  window.addEventListener('focus',onFocus);
  if(channel)channel.onmessage=onFocus;
  void refresh();
- return {updateQuote,refresh,destroy(){destroyed=true;channel?.close();dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
+ return {updateQuote,refresh,selectLevel,destroy(){destroyed=true;channel?.close();dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
 }

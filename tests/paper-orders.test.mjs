@@ -4,6 +4,7 @@ import {closeSide,orderPrice,positionProfit,validOrderQuantity,validOrderTrigger
 import {quotePair} from '../web/market-quotes.mjs';
 import {initialCheckpoint,DEFAULT_SIGNAL} from '../web/engine.mjs';
 import {startAutomation,projectScene,createExecutionPriceReader} from '../web/timeline.mjs';
+import {tradeLevels} from '../web/trade-levels.mjs';
 
 test('both sides mark an immediate exit against the opposing quote and charge the spread in demo points',()=>{
  const quote=quotePair(100),quantity=3;
@@ -46,6 +47,14 @@ test('a pending order waits on the same price and stops for discontinuous histor
  }
 });
 
+test('another tab may deliver an older frame without stopping or filling a working order',()=>{
+ const order={side:'buy',type:'limit',target:99,cursor:{time:100,close:100,version:4}};
+ const stale={version:4,first:1,last:99,closeAt:()=>98};
+ assert.deepEqual(matchPendingOrder(order,stale),{status:'pending',cursor:order.cursor});
+ assert.deepEqual(matchPendingOrder(order,{...stale,version:3,last:101}),{status:'pending',cursor:order.cursor});
+ assert.deepEqual(matchPendingOrder(order,{...stale,version:5}),{status:'review'});
+});
+
 test('missed executable closes can be recovered from an unchanged simulation anchor',()=>{
  const time=Date.parse('2026-11-11T01:00:00Z');
  const scene=startAutomation({checkpoint:initialCheckpoint(),signal:DEFAULT_SIGNAL},1,time);
@@ -55,4 +64,15 @@ test('missed executable closes can be recovered from an unchanged simulation anc
  assert.ok(later.rows[0].time>earlier.time);
  assert.equal(reader.closeAt(earlier.time),earlier.close);
  assert.equal(reader.closeAt(reader.last+1),null);
+});
+
+test('only working orders and open positions contribute to trade lines and equal prices share a line',()=>{
+ const positions=[{id:'p1',side:'buy',open:{price:100,time:2},close:null},{id:'p2',side:'buy',open:{price:101,time:1},close:{price:102}}];
+ const pending=[{id:'o1',side:'sell',type:'limit',target:100,time:3,status:'pending'},{id:'o2',side:'buy',type:'stop',target:103,time:4,status:'review'}];
+ const grouped=tradeLevels({positions,pending});
+ assert.equal(grouped.length,1);
+ assert.deepEqual(grouped[0].ids,['o1','p1']);
+ assert.equal(grouped[0].price,100);
+ assert.equal(tradeLevels({positions,pending},{orderLines:false})[0].title,'建玉 買');
+ assert.equal(tradeLevels({positions,pending},{positionLines:false})[0].title,'指値 売');
 });

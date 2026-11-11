@@ -10,11 +10,11 @@ const now=Date.parse('2026-11-10T01:00:00Z');
 const source=startAutomation({checkpoint:initialCheckpoint(),signal:DEFAULT_SIGNAL},1,now);
 const frame=step=>projectScene(source,now+step*1000);
 function fixture(){
- const api={series:[],removed:false,panes(){return Array.from({length:Math.max(0,...this.series.map(s=>s.pane))+1},()=>({setStretchFactor(){}}))},addSeries(type,options,pane=0){const s={type,options,pane,writes:0,setData(data){for(const row of data)for(const key of ['open','high','low','close','value'])if(key in row)assert.ok(Number.isFinite(row[key]),key);this.data=structuredClone(data);this.writes++},applyOptions(options){Object.assign(this.options,options)},createPriceLine(){}};this.series.push(s);return s},removeSeries(s){this.series=this.series.filter(item=>item!==s)},timeScale(){return scale},subscribeCrosshairMove(fn){this.crosshair=fn},unsubscribeCrosshairMove(){this.crosshair=null},setCrosshairPosition(price,time){this.cursor={price,time}},clearCrosshairPosition(){this.cursor=null},remove(){this.removed=true}};
+ const api={series:[],removed:false,panes(){return Array.from({length:Math.max(0,...this.series.map(s=>s.pane))+1},()=>({setStretchFactor(){}}))},addSeries(type,options,pane=0){const s={type,options,pane,writes:0,setData(data){for(const row of data)for(const key of ['open','high','low','close','value'])if(key in row)assert.ok(Number.isFinite(row[key]),key);this.data=structuredClone(data);this.writes++},applyOptions(options){Object.assign(this.options,options)},createPriceLine(options){const line={options};this.priceLines??=[];this.priceLines.push(line);return line},removePriceLine(line){this.priceLines=this.priceLines.filter(item=>item!==line)}};this.series.push(s);return s},removeSeries(s){this.series=this.series.filter(item=>item!==s)},timeScale(){return scale},subscribeClick(fn){this.click=fn},unsubscribeClick(){this.click=null},subscribeCrosshairMove(fn){this.crosshair=fn},unsubscribeCrosshairMove(){this.crosshair=null},setCrosshairPosition(price,time){this.cursor={price,time}},clearCrosshairPosition(){this.cursor=null},remove(){this.removed=true}};
  const scale={subscribeVisibleLogicalRangeChange(fn){this.onRange=fn},unsubscribeVisibleLogicalRangeChange(){this.onRange=null},setVisibleLogicalRange(range){this.range={...range};this.onRange?.(range)},applyOptions(options){this.options=options}};
- const library={createChart(element,options){api.options=options;return api},ColorType:{Solid:'solid'},CrosshairMode:{Normal:0},LineStyle:{Dashed:2},CandlestickSeries:'candle',LineSeries:'line',HistogramSeries:'histogram'};
- const inspected=[],viewport=[],controller=createTerminalChart({element:{getBoundingClientRect:()=>({width:390})},window:{},library,onInspect:time=>inspected.push(time),onViewport:value=>viewport.push(value)});
- return {api,scale,controller,inspected,viewport};
+ const library={createChart(element,options){api.options=options;return api},ColorType:{Solid:'solid'},CrosshairMode:{Normal:0},LineStyle:{Solid:0,Dotted:1,Dashed:2},CandlestickSeries:'candle',LineSeries:'line',HistogramSeries:'histogram'};
+ const inspected=[],viewport=[],activated=[],controller=createTerminalChart({element:{getBoundingClientRect:()=>({width:390})},window:{},library,onInspect:time=>inspected.push(time),onViewport:value=>viewport.push(value),onTradeLevel:ids=>activated.push(ids)});
+ return {api,scale,controller,inspected,viewport,activated};
 }
 test('the adapter renders only authoritative OHLC, uses existing indicator math, and switches panes without leaking series',()=>{
  const f=fixture(),record=frame(200);try{
@@ -52,6 +52,21 @@ test('axis labels never treat generated indices as Unix dates and range resoluti
  assert.match(candleTimeLabel(record.checkpoint,time),/^\d{2}:\d{2}:\d{2}$/);assert.equal(candleTimeLabel(initialCheckpoint(),71),'T71');
  assert.equal(candleTimeLabel(record.checkpoint,0),'T0');assert.equal(resolveChartWindow([]),null);
  const range=resolveChartWindow(record.checkpoint.rows,{range:{from:-1e9,to:1e9},following:false});assert.ok(range.from>=record.checkpoint.rows[0].time-1);assert.ok(range.to<=time+2);
+});
+test('trade lines open their own order and are removed from the chart when hidden',()=>{
+ const f=fixture(),record=frame(200);
+ const level={id:'trade:100.001',price:100.001,ids:['order-1'],kind:'limit',title:'指値 買',color:'#9d2938'};
+ try{
+  f.controller.update({record,tradeLevels:[level]});
+  assert.equal(f.api.series[0].priceLines[0].options.price,100.001);
+  f.api.click({paneIndex:1,point:{x:10,y:10},hoveredInfo:{objectId:level.id}});
+  assert.deepEqual(f.activated,[]);
+  f.api.click({paneIndex:0,point:{x:10,y:10},hoveredInfo:{objectId:level.id}});
+  assert.deepEqual(f.activated,[['order-1']]);
+  f.controller.update({record,tradeLevels:[]});
+  assert.deepEqual(f.api.series[0].priceLines,[]);
+ }finally{f.controller.destroy()}
+ assert.equal(f.api.click,null);
 });
 test('market candles and the crosshair use the true start times for every displayed period',()=>{
  const f=fixture(),record=frame(240),read=createMarketBarReader();

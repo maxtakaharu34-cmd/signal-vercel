@@ -159,7 +159,10 @@ body[data-page=viewer] :is(.order-position,.order-pending,.order-fill) {
   padding:5px 0;
   border-bottom:1px solid var(--border);
 }
-body[data-page=viewer] :is(.order-position,.order-pending) {grid-template-columns:39px minmax(55px,1fr) minmax(58px,1fr) 48px}
+body[data-page=viewer] .order-position {grid-template-columns:39px minmax(55px,1fr) minmax(58px,1fr) 48px}
+body[data-page=viewer] .order-pending {grid-template-columns:34px minmax(50px,1fr) minmax(66px,1fr) 90px}
+body[data-page=viewer] .order-row-actions {display:flex;justify-content:flex-end;gap:2px}
+body[data-page=viewer] .order-row-actions button {min-width:44px}
 body[data-page=viewer] .order-pending-status {justify-self:end;color:var(--muted);font-size:11px;white-space:nowrap}
 body[data-page=viewer] .order-pending-status[data-state=review] {color:#8e2e34}
 body[data-page=viewer] .order-fill {grid-template-columns:39px minmax(62px,1fr) auto}
