@@ -105,7 +105,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   }
   let note='注文受付時点のレートで処理します。';
   if(conditional)note='条件を満たしたレートで処理します。'+(store.remote?'口座の同期時に照合します。':'このブラウザーの価格同期時に照合します。');
-  set('orderNote',note+'実際の売買は行われません。');
+  set('orderNote',note+'この注文はサイト内の模擬取引です。');
   $('orderError').hidden=true;
   updateQuote();
  }
