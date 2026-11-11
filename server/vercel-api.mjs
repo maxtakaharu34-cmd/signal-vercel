@@ -1,6 +1,7 @@
 import {auth,email,encode,input,json,readSealed,seal} from './auth-session.mjs';
 import {customerRoutes} from './customer-api.mjs';
-import {handleSiteApi} from './site-api.mjs';
+import {customerPortal} from './customer-portal.mjs';
+import {handleSiteApi,validCookie} from './site-api.mjs';
 
 const COOKIE='__Host-fx-owner';
 const PKCE_COOKIE='__Host-fx-owner-pkce';
@@ -61,6 +62,11 @@ export async function handleVercelApi(original,env,{fetcher=fetch,siteHandler=ha
    const response=json({ok:true});response.headers.append('set-cookie',cookie('',0));response.headers.append('set-cookie',pkceCookie('',0));response.headers.append('set-cookie','signal_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');return response;
   }
   if(!user)return json({message:'所有者のメール認証が必要です。',code:'SIGN_IN_REQUIRED'},401);
-  const response=await siteHandler(request,env,user);if(updated)response.headers.append('set-cookie',cookie(await seal(session,env,COOKIE)));return response;
+  const customerAdmin=/^\/api\/admin\/customers(?:\/(balance|activity|messages))?$/.test(url.pathname);
+  if(customerAdmin&&!await validCookie(request,{id:user.userId},env.DEMO_BRIDGE_SECRET)){
+   return json({message:'管理画面に入口コードでログインしてください。',code:'FORBIDDEN'},403);
+  }
+  const response=customerAdmin?await customerPortal(request,env,session.access,fetcher,{admin:true}):await siteHandler(request,env,user);
+  if(updated)response.headers.append('set-cookie',cookie(await seal(session,env,COOKIE)));return response;
  }catch(error){return json({message:error.message||'通信を確認してください。',code:'AUTH_FAILED'},error.status||502)}
 }

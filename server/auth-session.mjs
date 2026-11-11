@@ -9,4 +9,4 @@ export async function auth(env,path,method='GET',body,token,fetcher=fetch){
  const response=await fetcher(env.SUPABASE_URL+'/auth/v1/'+path,{method,headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(12000)});
  const data=response.status===204?{}:await response.json();if(!response.ok)throw Object.assign(Error(response.status===429?'少し時間をおいてから再度お試しください。':'認証できませんでした。メールアドレスと認証コードを確認してください。'),{status:response.status===429?429:response.status>=500?502:401,providerCode:data.error_code??data.code});return data;
 }
-export async function input(request){const text=await request.text();if(text.length>2048)throw Object.assign(Error('入力が大きすぎます。'),{status:413});try{return JSON.parse(text)}catch{throw Object.assign(Error('入力内容を確認してください。'),{status:400})}}
+export async function input(request,limit=2048){const text=await request.text();if(text.length>limit)throw Object.assign(Error('入力が大きすぎます。'),{status:413});try{return JSON.parse(text)}catch{throw Object.assign(Error('入力内容を確認してください。'),{status:400})}}

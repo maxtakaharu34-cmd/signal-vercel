@@ -88,3 +88,41 @@ print('PASS: customer isolation, replay-safe commits and stale account or scene 
 run("delete from auth.mfa_factors where user_id="+lit(a))
 customer_call(a,ok=False)
 print('PASS: removing MFA invalidates existing elevated access to the cloud account')
+
+# Owner account changes and support replies are isolated from customer sessions.
+def portal(user,operation,payload=None,key=cloud_key,aal='aal2',ok=True):
+ query="select public.customer_portal("+lit(key)+","+lit(operation)+","+lit(json.dumps(payload or {}))+"::jsonb)"
+ result=as_user(user,"select set_config('request.jwt.claim.aal',"+lit(aal)+",true);"+query,ok)
+ return json.loads(result) if ok else None
+owner_aal='aal1'
+assert portal(a,'admin_list',aal=owner_aal)['customers'][0]['id']==a
+portal(b,'admin_list',ok=False)
+portal(b,'open',aal='aal1',ok=False)
+portal(a,'admin_list',key=bridge_token,aal=owner_aal,ok=False)
+assert portal(b,'open')['notifyToken']==portal(b,'open')['notifyToken']
+assert len(portal(a,'admin_list',{'query':'VIEWER@'},aal=owner_aal)['customers'])==1
+first='66666666-6666-4666-8666-666666666666'
+adjust={'customerId':b,'commandId':first,'balance':1500000,'expectedBalance':1000000,'reason':'デモ条件の変更'}
+assert portal(a,'admin_adjust',adjust,aal=owner_aal)['changed']
+assert customer_call(b)['account']['balance']==1500000
+assert portal(a,'admin_adjust',adjust,aal=owner_aal)['duplicate']
+portal(a,'admin_adjust',{**adjust,'commandId':command},aal=owner_aal,ok=False)
+history=portal(b,'activity',{'customerId':a})['adjustments']
+assert len(history)==1 and history[0]['previous_balance']==1000000 and history[0]['new_balance']==1500000
+assert 'actor_id' not in history[0]
+assert run("select actor_id from demo_private.customer_balance_adjustments where customer_id="+lit(b))==a
+portal(a,'admin_adjust',{**adjust,'customerId':a,'balance':500000,'commandId':command},aal=owner_aal,ok=False)
+assert run("select account->>'balance' from demo_private.customer_demo_accounts where customer_id="+lit(a))=='1000000'
+print('PASS: admin can set a scoped demo balance with an audit trail; retries, stale values and reductions during exposure are checked')
+
+sent=portal(b,'send',{'message':'テストの問い合わせ','commandId':command,'customerId':a})['message']
+assert portal(b,'send',{'message':'テストの問い合わせ','commandId':command})['message']==sent
+assert portal(a,'admin_list',{'query':'viewer@'},aal=owner_aal)['customers'][0]['reply_pending']
+assert portal(a,'admin_messages',{'customerId':a},aal=owner_aal)['messages']==[]
+assert portal(a,'admin_messages',{'customerId':b},aal=owner_aal)['messages']==[sent]
+answer=portal(a,'admin_send',{'customerId':b,'commandId':first,'message':'テストの返信'},aal=owner_aal)['message']
+assert portal(b,'messages',{'customerId':a})['messages']==[answer,sent]
+assert not portal(a,'admin_list',{'query':'viewer@'},aal=owner_aal)['customers'][0]['reply_pending']
+assert portal(b,'messages',{'before':answer['id']})['messages']==[sent]
+as_user(b,"select * from demo_private.customer_support_messages",False)
+print('PASS: customer threads are isolated, owner replies update the queue, and history paginates without exposing actor identifiers')

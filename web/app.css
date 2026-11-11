@@ -71,3 +71,58 @@ body[data-page=admin]{--bg:#10161f;--panel:#19212c;--panel2:#202c3b;--border:#34
 .data-workspace #panel-indicators{height:auto;max-height:540px}
 
 @media(max-width:767px){.context-horizons{margin:0 12px}.context-horizons>div{padding:10px 8px}.context-facts{grid-template-columns:1fr;padding:12px;gap:10px}.context-facts>div{display:grid;grid-template-columns:100px 1fr;gap:3px 6px;padding-bottom:8px;border-bottom:1px solid var(--border)}.context-facts small{grid-column:2}.context-references{margin:0 12px;gap:8px}.context-note{margin:12px;font-size:12px}}
+
+/* Customer management shares the terminal's panel and form controls. */
+.admin-section-nav {display:flex;gap:8px;margin-bottom:14px}
+.admin-section-nav [aria-current=page] {border-color:var(--blue);color:var(--blue)}
+.admin-customers .panel-heading {min-height:52px}
+.admin-customer-layout {display:grid;grid-template-columns:minmax(220px,340px) minmax(0,1fr)}
+.admin-customer-directory,.admin-customer-detail {min-width:0;padding:14px}
+.admin-customer-directory {border-right:1px solid var(--border)}
+.admin-customer-search,.admin-balance-form {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;align-items:center}
+.admin-customer-search label,.admin-balance-form label,.admin-balance-form .caption {grid-column:1/-1}
+.admin-customer-search input,.admin-balance-form input,.support-compose textarea {
+ width:100%;min-height:44px;padding:7px 9px;border:1px solid var(--border);border-radius:3px;
+ color:var(--text);background:var(--panel2);
+}
+.admin-balance-form input {grid-column:1/-1}
+.admin-balance-form button {justify-self:start}
+.admin-customer-directory ul,.support-messages,.balance-history {list-style:none;margin:10px 0;padding:0}
+.admin-customer-directory ul {border-top:1px solid var(--border)}
+.admin-customer-directory li button {
+ width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;
+ padding:10px 7px;min-height:48px;border:0;border-bottom:1px solid var(--border);
+ color:var(--text);background:var(--panel);text-align:left;
+}
+.admin-customer-directory li button[aria-pressed=true] {background:var(--panel2);box-shadow:inset 3px 0 var(--blue)}
+.admin-customer-directory li span,.admin-customer-detail header h3 {overflow-wrap:anywhere}
+.admin-customer-directory li small {color:var(--blue)}
+.admin-customer-pages {display:flex;justify-content:space-between;gap:8px}
+.admin-customer-detail {display:grid;align-content:start;gap:16px}
+.admin-customer-detail header h3 {font-size:15px}
+.admin-balance {padding-block:12px;border-block:1px solid var(--border)}
+.admin-balance-heading,.support-message-meta {display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.admin-balance-heading strong {font-size:17px}
+.admin-balance h4 {margin:12px 0 4px;font-size:11px}
+.balance-history li,.support-message {border-top:1px solid var(--border);padding:7px 0}
+.balance-history time,.support-message-meta time {font-size:10px;color:var(--muted);margin-left:8px}
+.balance-history p,.support-message p {white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px}
+.portal-status {font-size:12px;color:var(--muted)}
+.portal-status:not(:empty) {padding-block:6px}
+.support-thread {margin-top:8px}
+.support-messages {max-height:300px;overflow:auto;overscroll-behavior:contain}
+.support-message {padding-inline:8px}
+.support-message[data-mine=true] {background:var(--panel2)}
+.support-compose {display:grid;gap:6px}
+.support-compose textarea {resize:vertical}
+.support-compose button {justify-self:start;min-height:44px}
+.customer-portal-actions {display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.customer-balance-activity {margin-top:8px}
+.customer-balance-activity summary {min-height:40px;display:list-item;line-height:40px;cursor:pointer;color:var(--blue)}
+.customer-support-dialog .support-thread {min-width:0}
+@media (max-width:767px){
+ .admin-customer-layout {grid-template-columns:minmax(0,1fr)}
+ .admin-customer-directory {border-right:0;border-bottom:1px solid var(--border)}
+ .admin-section-nav a {padding-inline:6px}
+ .admin-customer-search input,.admin-balance-form input,.support-compose textarea {font-size:16px}
+}

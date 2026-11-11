@@ -43,3 +43,39 @@ test('production never uses the development public proxy and missing configurati
  let suppliedUser='unset';const r=await handleVercelApi(request('/api/scene'),{...env,SIGNAL_READ_FALLBACK_URL:'https://evil.test'},{siteHandler:async(_r,_env,user)=>{suppliedUser=user;return Response.json({common:true})}});assert.equal(r.status,200);assert.equal(suppliedUser,null);
  assert.equal((await handleVercelApi(request('/api/admin/login',{pin:'111'}),{},{})).status,503);
 });
+
+test('customer management requires the verified owner and that session’s PIN before forwarding a scoped request',async()=>{
+ const customer='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',command='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const calls=[];
+ const fetcher=async(url,options)=>{
+  if(url.endsWith('/customer_portal')){
+   assert.equal(options.headers.authorization,'Bearer '+tokens.access_token);
+   const body=JSON.parse(options.body);
+   assert.equal(body.bridge_token,env.DEMO_BRIDGE_SECRET);
+   calls.push(body);
+   return Response.json(body.operation==='admin_list'?{customers:[]}:{balance:1500000,changed:true,notifyToken:customer});
+  }
+  if(url.endsWith('/broadcast')){
+   calls.push(JSON.parse(options.body));
+   return Response.json({});
+  }
+  return authFetch(url,options);
+ };
+ const send=(path,body,cookie='',header={})=>handleVercelApi(request(path,body,cookie,header),env,{fetcher});
+ const ownerCookie=(await login()).headers.get('set-cookie');
+ const path='/api/admin/customers';
+ assert.equal((await send(path)).status,401);
+ assert.equal((await send(path,null,ownerCookie)).status,403);
+ assert.equal(calls.length,0);
+ const pin=(await (await send('/api/admin/login',{pin:'111'},ownerCookie)).json()).session;
+ const headers={'x-signal-admin-session':pin};
+ assert.equal((await send(path+'?q=test',null,ownerCookie,headers)).status,200);
+ assert.equal(calls[0].operation,'admin_list');
+ const edit=path+'/balance?customer='+customer;
+ const payload={commandId:command,balance:1500000,expectedBalance:1000000,reason:'  デモ設定  ',side:'sell'};
+ assert.equal((await send(edit,payload,ownerCookie,{...headers,origin:'https://evil.test'})).status,403);
+ assert.equal((await send(edit,{...payload,balance:-1},ownerCookie,headers)).status,400);
+ assert.deepEqual(await (await send(edit,payload,ownerCookie,headers)).json(),{balance:1500000,changed:true});
+ assert.deepEqual(calls[1].payload,{customerId:customer,commandId:command,balance:1500000,expectedBalance:1000000,reason:'デモ設定'});
+ assert.deepEqual(calls[2].messages,[{topic:'demo-account-refresh-'+customer,event:'refresh',payload:{changed:true}}]);
+});

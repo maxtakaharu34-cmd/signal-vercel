@@ -1,3 +1,6 @@
+import {subscribeAccountRefresh} from './live.mjs';
+import {mountMessageThread,renderBalanceHistory} from './portal-ui.mjs';
+
 const emptyOutcome={filled:0,review:0,liquidated:0};
 
 async function api(window,path,body){
@@ -58,7 +61,35 @@ export function mountCustomerAccount({document,window,orderPanel}){
  if(!button||!dialog)return {destroy(){}};
  const message=byId('customerAccountMessage'),email=byId('customerEmail'),mfaCode=byId('customerMfaCode');
  const register=byId('customerRegister'),login=byId('customerLogin');
- let state='guest',destroyed=false,busy=false,identity=null,store=null;
+ const supportDialog=byId('customerSupportDialog'),supportButton=byId('customerSupportOpen');
+ const activity=byId('customerBalanceActivity'),history=byId('customerBalanceHistory');
+ let state='guest',destroyed=false,busy=false,identity=null,store=null,notificationToken=null;
+ let stopNotify=()=>{},activityTicket=0;
+ const thread=supportDialog?mountMessageThread(byId('customerSupportThread'),window,'customer',{
+  active:()=>!destroyed&&state==='ready'&&supportDialog.open,
+  read:before=>api(window,'messages'+(before?'?before='+encodeURIComponent(before):'')),
+  send:body=>api(window,'messages',body),
+ }):null;
+ const timer=window.setInterval(()=>{
+  if(!document.hidden)void thread?.refresh();
+ },8000);
+
+ async function refreshActivity(){
+  if(!activity?.open||state!=='ready')return;
+  const ticket=++activityTicket;
+  try{
+   const {adjustments}=await api(window,'activity');
+   if(ticket===activityTicket&&state==='ready'&&!destroyed)renderBalanceHistory(history,adjustments);
+  }catch(error){
+   if(ticket===activityTicket&&state==='ready'&&!destroyed)renderBalanceHistory(history,[],error.message);
+  }
+ }
+ if(supportButton){
+  supportButton.onclick=()=>{supportDialog.showModal();void thread.refresh();};
+  byId('customerSupportClose').onclick=()=>supportDialog.close();
+  supportDialog.addEventListener('close',()=>thread.reset());
+ }
+ activity?.addEventListener('toggle',()=>void refreshActivity());
  const controls=[register,login,byId('customerEnroll'),byId('customerMfaConfirm'),byId('customerLogout')];
 
  function render(data,{clearMessage=true}={}){
@@ -76,13 +107,27 @@ export function mountCustomerAccount({document,window,orderPanel}){
   mfaCode.value='';
   clearFactor();
   if(clearMessage)message.textContent='';
+  if(supportButton)supportButton.hidden=state!=='ready';
+  if(activity)activity.hidden=state!=='ready';
   if(state==='ready'){
    if(identity!==data.email){
     identity=data.email;
     store=createCustomerOrderStore(window,()=>void lost());
    }
    orderPanel.setStore(store);
+   if(notificationToken!==data.notifyToken){
+    stopNotify();
+    notificationToken=data.notifyToken;
+    stopNotify=subscribeAccountRefresh(window,notificationToken,()=>Promise.all([orderPanel.refresh(),thread?.refresh(),refreshActivity()]));
+   }
   }else{
+   activityTicket++;
+   stopNotify();
+   notificationToken=null;
+   if(supportDialog?.open)supportDialog.close();
+   thread?.reset();
+   if(activity)activity.open=false;
+   history?.replaceChildren();
    identity=null;
    orderPanel.setStore(null);
   }
@@ -172,5 +217,5 @@ export function mountCustomerAccount({document,window,orderPanel}){
   if(!dialog.open)dialog.showModal();
   if(returned==='failed')message.textContent='メール認証を完了できませんでした。リンクの有効期限を確認してください。';
  }).catch(()=>{});
- return {destroy(){destroyed=true;}};
+ return {destroy(){destroyed=true;stopNotify();window.clearInterval(timer);thread?.reset();}};
 }

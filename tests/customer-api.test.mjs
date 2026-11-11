@@ -36,6 +36,7 @@ function fixture(){
    return respond(tokens('aal2'));
   }
   if(url.pathname==='/auth/v1/logout')return new Response(null,{status:204});
+  if(url.pathname.endsWith('/customer_portal'))return respond({ok:true});
   if(url.pathname.endsWith('/customer_order_transaction')){
    assert.equal(claims(init.headers.authorization).aal,'aal2');
    assert.equal(body.bridge_token,env.DEMO_BRIDGE_SECRET);

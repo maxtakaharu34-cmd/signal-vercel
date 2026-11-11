@@ -1,4 +1,5 @@
 import {auth,email,encode,input,json,readSealed,seal} from './auth-session.mjs';
+import {customerPortal,portalRpc} from './customer-portal.mjs';
 import {customerOrders} from './customer-orders.mjs';
 
 const SESSION='__Host-fx-customer';
@@ -89,7 +90,11 @@ export async function customerRoutes(request,env,{fetcher,siteHandler}){
   }catch(error){if(error.status!==401)throw error;user=null;}
  }
  const reply=response=>updated&&user?attachSession(response,session,env):response;
- if(path==='/api/customer/session'&&!post)return reply(json(user?status(session,user):{enabled:true,state:'guest'}));
+ if(path==='/api/customer/session'&&!post){
+  const state=user?status(session,user):{enabled:true,state:'guest'};
+  if(state.state==='ready')Object.assign(state,await portalRpc(env,session.access,fetcher,'open'));
+  return reply(json(state));
+ }
  if(!user)return needSignIn();
 
  if(path==='/api/customer/mfa/enroll'&&post){
@@ -115,7 +120,8 @@ export async function customerRoutes(request,env,{fetcher,siteHandler}){
    const tokens=await call('factors/'+factor+'/verify','POST',{challenge_id:challenge.id,code:body.code},session.access);
    const next=tokenSession(tokens,session.until),confirmed=await call('user','GET',null,next.access);
    if(confirmed.id!==user.id||!secureUser(confirmed)||!verifiedAssurance(next,confirmed))throw Error('二段階認証を確認できませんでした。');
-   const response=json(status(next,confirmed));
+   const profile=await portalRpc(env,next.access,fetcher,'open');
+   const response=json({...status(next,confirmed),...profile});
    response.headers.append('set-cookie',cookie(FACTOR,'',0));
    return await attachSession(response,next,env);
   }catch(error){
@@ -125,5 +131,6 @@ export async function customerRoutes(request,env,{fetcher,siteHandler}){
  }
  if(!verifiedAssurance(session,user))return reply(json({code:'MFA_REQUIRED',message:'認証アプリで二段階認証を完了してください。'},403));
  if(path==='/api/customer/orders')return reply(await customerOrders(request,env,session.access,{fetcher,siteHandler}));
+ if(['/api/customer/activity','/api/customer/messages'].includes(path))return reply(await customerPortal(request,env,session.access,fetcher));
  return json({message:'ページが見つかりません。'},404);
 }
