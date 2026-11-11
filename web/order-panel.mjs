@@ -15,7 +15,8 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
  const target = $('orderTarget');
  const leverage = $('orderLeverage');
  const submit = $('orderSubmit');
- const store = createPaperOrderStore(window);
+ const localStore = createPaperOrderStore(window);
+ let store=localStore,storeTimer=null;
  const triggers = document.querySelectorAll('[data-order-side]');
  let action = null, busy = false, readId = 0, destroyed = false;
  let marks = [];
@@ -102,7 +103,9 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    const below=(action.side==='buy')===(type==='limit');
    set('orderTargetHelp','現在の'+(action.side==='buy'?'買値':'売値')+'より'+(below?'低い':'高い')+'レートを指定');
   }
-  set('orderNote',conditional?'条件を満たした仮想レートで約定します。このブラウザーの価格同期時に照合します。':'注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。');
+  let note='注文を受け付けた時点の仮想レートで約定します。';
+  if(conditional)note='条件を満たした仮想レートで約定します。'+(store.remote?'口座の同期時に照合します。':'このブラウザーの価格同期時に照合します。');
+  set('orderNote',note);
   $('orderError').hidden=true;
   updateQuote();
  }
@@ -171,9 +174,10 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    button.setAttribute('aria-label',ORDER_LABELS[order.side]+ORDER_TYPES[order.type]+'注文を取り消す');
    button.onclick=async()=>{
     button.disabled=true;
+    const orderStore=store;
     try{
-     if(getQuote())await store.match(getScene(),Date.now());
-     await store.cancel(order.id);
+     if(!orderStore.remote&&getQuote())await orderStore.match(getScene(),Date.now());
+     await orderStore.cancel(order.id);
      notify('デモ注文を取り消しました。');
      channel?.postMessage('changed');
     }catch(error){notify(error.message);}
@@ -237,7 +241,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    render(orders);
   } catch {
    if (destroyed || id !== readId) return;
-   set('ordersStatus','このブラウザーでデモ注文の保存領域を開けません。');
+   set('ordersStatus',store.remote?'口座を同期できませんでした。接続を確認してください。':'このブラウザーでデモ注文の保存領域を開けません。');
    $('ordersStatus').hidden = false;
   }
  }
@@ -257,24 +261,25 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   const price = orderPrice(side,quote),time = Date.now();
   const scene=getScene();
   const selectedLeverage=Number(leverage.value);
+  const orderStore=store;
   busy = true;
   $('orderDialogClose').disabled = true;
   $('orderError').hidden = true;
   updateQuote();
   try {
-   await store.match(scene,time);
-   if (position) await store.close(position.id,quote,time,scene);
-   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time,instrument,leverage:selectedLeverage,scene});
+   if(!orderStore.remote)await orderStore.match(scene,time);
+   if (position) await orderStore.close(position.id,quote,time,scene);
+   else if(type==='market')await orderStore.place({side,quantity:quantity.valueAsNumber,price,time,instrument,leverage:selectedLeverage,scene});
    else{
     const row=scene.checkpoint.rows.at(-1),cursor={time:row.time,close:row.close,version:scene.version};
     if(pending){
-     await store.amend(pending.id,{target:condition,cursor,scene});
-    }else await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time,instrument,leverage:selectedLeverage,scene});
+     await orderStore.amend(pending.id,{target:condition,cursor,scene});
+    }else await orderStore.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor,time,instrument,leverage:selectedLeverage,scene});
     lastMatched=null;
    }
   } catch(error) {
    const errors=['この建玉はすでに決済されています。','変更できる未約定注文がありません。取引画面で状態を確認してください。','価格が更新されました。レートを確認してください。','余力が不足しています。数量またはレバレッジを確認してください。'];
-   set('orderError',errors.includes(error.message)?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
+   set('orderError',orderStore.remote||errors.includes(error.message)?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
    $('orderError').hidden = false;
    channel?.postMessage('changed');void refresh();
    return;
@@ -299,5 +304,18 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
  window.addEventListener('focus',onFocus);
  if(channel)channel.onmessage=onFocus;
  void refresh();
- return {updateQuote,refresh,selectLevel,destroy(){destroyed=true;channel?.close();dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
+ function setStore(next){
+  const active=next??localStore;
+  if(store===active)return;
+  store=active;
+  lastMatched=null;
+  needsMatching=false;
+  if(dialog.open)dialog.close();
+  set('orderStorageLabel',store.remote?'ログイン中の口座に保存':'このブラウザーに保存');
+  render({positions:[],pending:[],account:null});
+  window.clearInterval(storeTimer);
+  if(store.remote)storeTimer=window.setInterval(()=>{if(!document.hidden)void refresh();},8000);
+  void refresh();
+ }
+ return {updateQuote,refresh,selectLevel,setStore,destroy(){destroyed=true;window.clearInterval(storeTimer);channel?.close();dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
 }

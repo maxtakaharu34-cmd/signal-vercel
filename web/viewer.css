@@ -425,3 +425,25 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
  body[data-page=viewer] .landscape-ticker {gap:4px}
  body[data-page=viewer] .landscape-ticker #landscapeSignal {font-size:10px}
 }
+
+.customer-account-open {
+ border:1px solid var(--terminal-line,#d7dce4);
+ border-radius:4px;
+ background:#fff;
+ color:#15558c;
+ padding:0 10px;
+ min-height:36px;
+ font-size:.75rem;
+ font-weight:650;
+}
+.customer-account-dialog {max-width:min(420px,100%);padding:16px;color:#192533;}
+.customer-account-form {display:grid;gap:10px;margin:12px 0;}
+.customer-account-form[hidden] {display:none;}
+.customer-account-form h3 {margin:0;font-size:.92rem;}
+.customer-account-form p,.customer-account-message {margin:0;font-size:.8125rem;line-height:1.5;}
+.customer-account-form input {width:100%;min-height:44px;color:inherit;background:#fff;border:1px solid #aeb9c7;border-radius:4px;padding:0 10px;}
+.customer-account-form .button,.customer-account-dialog > .button {min-height:44px;}
+.customer-account-actions {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.customer-account-dialog #customerQr {border:1px solid #d7dce4;background:#fff;}
+.customer-account-dialog #customerManualKey code {overflow-wrap:anywhere;display:block;}
+.customer-account-message:not(:empty) {margin:10px 0;}

@@ -45,3 +45,10 @@ The November9 phone layout groups quote, direction and all six levels above the 
 ### UI refinement (2026-11-09)
 
 The chart's **指標** control opens display settings for SMA 20, Bollinger bands and an optional RSI/MACD pane. Settings stay on the current device and never publish scenario changes. The owner panel labels immediate commands versus manual publication, shows unpublished preview status and a before/after change list, and retains drafts when offline. Research and verification: [UI review](docs/UI-RESEARCH-AND-REFINEMENT-2026-11-09.md).
+
+
+## Customer demo accounts
+
+The public viewer keeps its browser-local demo for guests. A signed-in customer gets a separate account with its own ¥1,000,000 demo balance. The server computes fills, margin and P&L from the shared simulation, then stores orders and positions in PostgreSQL. The signed-in browser refreshes account activity while the page is visible. Pending orders and open positions are reconciled on a match request or a trade action. Guest trades remain in the browser where they were placed.
+
+Before enabling customer registration, configure Supabase customer email delivery and the exact `/api/customer/callback` on the production origin, keep email confirmation and TOTP enrollment/verification enabled, and apply the customer account migration. Once an external test mailbox can complete the flow, set `CUSTOMER_AUTH_ENABLED=true` in Vercel and redeploy. Customer and owner authentication use different cookies and callback routes.

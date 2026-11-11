@@ -1,3 +1,4 @@
+import {mountCustomerAccount} from './customer-account.mjs';
 import {createTerminalChart} from './terminal-chart.mjs';
 import {validAutomation,newerFrame,createMarketBarReader} from './timeline.mjs';
 import {CHART_PERIODS,marketClock} from './market-bars.mjs';
@@ -271,6 +272,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  const beforeUnload=event=>{if(adminPage&&(dirty||automationDraft||saving)){event.preventDefault();event.returnValue=''}};window.addEventListener('beforeunload',beforeUnload);
  document.querySelectorAll('[data-viewbars]').forEach(button=>button.onclick=()=>{maxBars=Number(button.dataset.viewbars);document.querySelectorAll('[data-viewbars]').forEach(e=>{const selected=e===button;e.classList.toggle('active',selected);e.setAttribute('aria-pressed',String(selected))});if(!adminPage)savePreferences();hover=null;selectedTime=null;chartController?.follow();paint()});
  let resizeTimer=null;const resize=()=>{window.clearTimeout(resizeTimer);resizeTimer=window.setTimeout(()=>{if(!chartController){hover=null;selectedTime=null}if($('signalDialog')?.open&&!compactViewer())$('signalDialog').close();paint()},120)};window.addEventListener('resize',resize);
+ let customerAccount;
  if(!adminPage){
   orderPanel=mountOrderPanel({
    document,window,
@@ -281,9 +283,10 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
    onOrdersChange:orders=>{orderData=orders;updateOrderLevels();},
    notify:toast,
   });
+  customerAccount=mountCustomerAccount({document,window,orderPanel});
  }
  const clock=()=>{renderOwnerAuth();setText('clock',new Date().toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false})+' JST');renderSyncInfo()};clock();const clockTimer=window.setInterval(clock,1000);paint();
  try{if(!client)client=createSiteClient(window);repository=createSceneRepository(client);const initial=!adminPage&&client.siteAuth?{data:{session:null}}:await client.auth.getSession();if(initial.error)throw initial.error;session=initial.data.session;await loadSession();const listener=client.auth.onAuthStateChange((event,next)=>{if(session?.user?.id===next?.user?.id&&ready&&event!=='SIGNED_OUT'){session=next;return}session=next;factorId=null;window.setTimeout(()=>{if(!destroyed)void loadSession()},0)});authUnsubscribe=()=>listener.data.subscription.unsubscribe();}catch(error){connection('接続を確認','error');authMessage(error.message);gates();setText('gateMessage','接続を確認できません。管理権限は付与されていません。')}
- return {destroy(){destroyed=true;++epoch;chartController?.destroy();orderPanel?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
+ return {destroy(){destroyed=true;++epoch;chartController?.destroy();customerAccount?.destroy();orderPanel?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
 }
 if(typeof globalThis.document!=='undefined'&&typeof globalThis.window!=='undefined')void mountApp();

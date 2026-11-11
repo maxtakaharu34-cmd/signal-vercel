@@ -58,3 +58,33 @@ assert json.loads(via_site(owner,payload,'publish'))['scene']['version']==3
 assert run("select actor_site_id from demo_private.scene_audit where version=3")=='site-owner-id';print('PASS: Site publication persists and records the trusted Site identity')
 via_site(owner,payload,'publish',ok=False);assert as_user(b,'select version from public.demo_scene')=='3';print('PASS: Site bridge rejects stale publications')
 run('set role anon;select * from demo_private.site_bridge_keys',False);print('PASS: browser role cannot read the Site credential hash')
+
+# Customer balances and orders use authenticated identity and a scoped server credential.
+cloud_key='b'*64
+run("insert into demo_private.site_bridge_keys values(2,encode(extensions.digest("+lit(cloud_key)+",'sha256'),'hex')); update auth.users set email_confirmed_at=now(); insert into auth.mfa_factors values ("+lit(a)+",'verified'),("+lit(b)+",'verified')")
+command='44444444-4444-4444-8444-444444444444'
+def customer_call(user,operation='read',payload=None,command_id=None,key=cloud_key,aal='aal2',ok=True):
+ query="select public.customer_order_transaction("+lit(key)+","+lit(operation)+","+(lit(command_id) if command_id else 'null')+","+lit(json.dumps(payload or {}))+"::jsonb)"
+ result=as_user(user,"select set_config('request.jwt.claim.aal',"+lit(aal)+",true);"+query,ok)
+ return json.loads(result) if ok else None
+customer_call(a,aal='aal1',ok=False)
+customer_call(a,key=bridge_token,ok=False)
+as_user(a,"select * from demo_private.customer_demo_accounts",False)
+run("set role anon;select public.customer_order_transaction('', 'read', null, '{}')",False)
+print('PASS: customer account storage needs second factor and the dedicated Vercel bridge')
+position={'id':command,'side':'buy','quantity':1,'open':{'price':100.003,'time':123},'close':None,'margin':5}
+payload={'version':0,'scene_version':3,'positions':[position],'pending':[],'removed_pending':[],'account':{'id':'demo','balance':1000000,'cursor':None}}
+assert customer_call(a)['account'] is None
+saved=customer_call(a,'save',payload,command)
+assert saved['version']==1 and saved['positions']==[position]
+assert customer_call(a,'save',payload,command)['duplicate']
+assert customer_call(a,command_id=command)['duplicate']
+assert customer_call(a)['positions']==[position]
+assert customer_call(b,command_id=command)['positions']==[] and not customer_call(b,command_id=command)['duplicate']
+customer_call(a,'save',payload,'55555555-5555-4555-8555-555555555555',ok=False)
+customer_call(a,'save',{**payload,'version':1,'scene_version':2},ok=False)
+assert customer_call(a)['version']==1
+print('PASS: customer isolation, replay-safe commits and stale account or scene rejection')
+run("delete from auth.mfa_factors where user_id="+lit(a))
+customer_call(a,ok=False)
+print('PASS: removing MFA invalidates existing elevated access to the cloud account')
