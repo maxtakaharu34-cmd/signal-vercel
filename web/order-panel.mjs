@@ -33,7 +33,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   void store.match(scene,Date.now()).then(async outcome=>{
    if (destroyed || (!outcome.filled && !outcome.review && !outcome.liquidated)) return;
    if (outcome.liquidated) notify(outcome.liquidated+'件の建玉をロスカットしました。');
-   else if (outcome.filled) notify(outcome.filled+'件のデモ注文が約定しました。');
+   else if (outcome.filled) notify(outcome.filled+'件の仮想注文が約定しました。');
    channel?.postMessage('changed');
    await refresh();
   }).catch(()=>{
@@ -117,7 +117,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   $('orderInstrument').textContent=instrumentInfo(instrument).label;
   target.step=String(10**-instrumentInfo(instrument).digits);
   target.min=target.step;
-  $('orderDialogTitle').textContent = position ? 'デモ決済' : pending ? 'デモ注文の変更' : 'デモ注文';
+  $('orderDialogTitle').textContent = position ? '仮想決済' : pending ? '仮想注文の変更' : '仮想注文';
   $('orderDirection').textContent = ORDER_LABELS[side];
   $('orderDirection').dataset.side = side;
   $('orderRateType').textContent = side === 'buy' ? '買値（Ask）' : '売値（Bid）';
@@ -178,7 +178,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
     try{
      if(!orderStore.remote&&getQuote())await orderStore.match(getScene(),Date.now());
      await orderStore.cancel(order.id);
-     notify('デモ注文を取り消しました。');
+     notify('仮想注文を取り消しました。');
      channel?.postMessage('changed');
     }catch(error){notify(error.message);}
     await refresh();
@@ -241,7 +241,7 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
    render(orders);
   } catch {
    if (destroyed || id !== readId) return;
-   set('ordersStatus',store.remote?'口座を同期できませんでした。接続を確認してください。':'このブラウザーでデモ注文の保存領域を開けません。');
+   set('ordersStatus',store.remote?'口座を同期できませんでした。接続を確認してください。':'このブラウザーで仮想注文の保存領域を開けません。');
    $('ordersStatus').hidden = false;
   }
  }

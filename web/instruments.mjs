@@ -9,7 +9,7 @@ const pairs = [
  ['ADA',160000,1],['DOGE',460000,1],['LTC',940,3],['AVAX',3100,2],
 ];
 
-const index = {id:DEFAULT_INSTRUMENT,label:'共通デモ指数',digits:3,spreadTicks:6};
+const index = {id:DEFAULT_INSTRUMENT,label:'共通仮想指数',digits:3,spreadTicks:6};
 export const INSTRUMENTS = [index,...pairs.map(([currency,reference,digits])=>({
  id:'BTC/'+currency,label:'BTC/'+currency,reference,digits,
  spreadTicks:Math.max(2,2*Math.round(reference*10**digits*.00004)),

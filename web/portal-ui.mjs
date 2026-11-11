@@ -18,7 +18,7 @@ export function renderBalanceHistory(list,items,empty='残高調整はありま�
   amount.textContent=demoYen(item.previous_balance)+' → '+demoYen(item.new_balance);
   time.dateTime=item.created_at;
   time.textContent=portalDate(item.created_at);
-  reason.textContent=item.reason;
+  reason.textContent=item.reason==='デモキャンペーンボーナス'?'キャンペーンボーナス':item.reason;
   row.append(amount,time,reason);
   return row;
  }));

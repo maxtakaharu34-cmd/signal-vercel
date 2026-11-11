@@ -234,10 +234,10 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
   });
   const filename=['signal-desk-demo',marketView?marketView.period+'s':null,adminPage?null:selectedInstrument().replace('/','-'),adminPage?null:preferences.side].filter(Boolean).join('-')+'.csv';
   saveDownload(window,document,[heading,...values].join('\n'),filename,'text/csv;charset=utf-8');
-  toast('デモ指数のCSVを保存しました');
+  toast('仮想指数のCSVを保存しました');
  };
- if($('exportScene'))$('exportScene').onclick=()=>{if(!ready||published.version<1)return;saveDownload(window,document,sceneJson(published),'demo-scene-v'+published.version+'.json','application/json');toast('公開済みの設定を書き出しました')};
- if($('exportEvents'))$('exportEvents').onclick=()=>{if(!ready||!eventRows.length)return;saveDownload(window,document,eventsCsv(eventRows),'demo-history-v'+published.version+'.csv','text/csv;charset=utf-8');toast('取得済みの変更履歴を書き出しました（最大30件）')};
+ if($('exportScene'))$('exportScene').onclick=()=>{if(!ready||published.version<1)return;saveDownload(window,document,sceneJson(published),'fx-sim-scene-v'+published.version+'.json','application/json');toast('公開済みの設定を書き出しました')};
+ if($('exportEvents'))$('exportEvents').onclick=()=>{if(!ready||!eventRows.length)return;saveDownload(window,document,eventsCsv(eventRows),'fx-sim-history-v'+published.version+'.csv','text/csv;charset=utf-8');toast('取得済みの変更履歴を書き出しました（最大30件）')};
  const dataTabs=[...document.querySelectorAll('[data-data-tab]')],dockTabs=[...document.querySelectorAll('[data-dock-view]')];
  function markView(key){if(adminPage)return;document.body.dataset.view=key;if(key==='trades')void orderPanel?.refresh();for(const button of dockTabs){const selected=button.dataset.dockView===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1}document.querySelectorAll('.classic-toolbar [data-open-tab],.classic-toolbar [data-view-chart]').forEach(e=>{const current=(e.dataset.openTab||'chart')===key;if(current)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current')});window.cancelAnimationFrame(viewFrame);viewFrame=window.requestAnimationFrame(()=>{if(!destroyed)paint()})}
  function selectDataTab(key,focus=false){if(!dataTabs.some(e=>e.dataset.dataTab===key))return;for(const button of dataTabs){const selected=button.dataset.dataTab===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;const panel=document.getElementById(button.getAttribute('aria-controls'));if(panel)panel.hidden=!selected;if(selected&&focus)button.focus()}markView(key)}

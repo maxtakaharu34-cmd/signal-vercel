@@ -50,7 +50,7 @@ export function mountAdminCustomers({document,window,call}){
    return row;
   }));
   if(focused)list.querySelector('[data-customer-id="'+focused+'"]')?.focus();
-  listStatus.textContent=customers.length?'':'該当するデモ口座はありません。';
+  listStatus.textContent=customers.length?'':'該当する仮想口座はありません。';
   nextButton.hidden=!next;
   previousButton.hidden=cursors.length<2;
  }
@@ -207,7 +207,7 @@ export function mountAdminCustomers({document,window,call}){
    input.value=String(result.balance);
    reason.value='';
    lastWrite=null;
-   balanceStatus.textContent=result.changed?'デモ残高を更新しました。':result.duplicate?'この調整は反映済みです。':'デモ残高は同じ金額です。';
+   balanceStatus.textContent=result.changed?'仮想残高を更新しました。':result.duplicate?'この調整は反映済みです。':'仮想残高は同じ金額です。';
    void loadActivity();
    void loadList({silent:true});
   }catch(error){

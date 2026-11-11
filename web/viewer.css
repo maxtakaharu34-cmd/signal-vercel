@@ -120,7 +120,6 @@ body[data-page=viewer] .chart-order-bar {
   font-size:11px;
   white-space:nowrap;
 }
-body[data-page=viewer] .chart-order-bar>span {margin-inline-end:4px}
 body[data-page=viewer] .order-side-button {
   min-width:80px;
   min-height:44px;
@@ -238,7 +237,7 @@ body[data-page=viewer] .bar-forming {
 body[data-page=viewer] .classic-header{height:var(--header-h);min-height:var(--header-h);padding:0 24px;gap:24px;border-top:0;border-bottom:1px solid var(--border);box-shadow:none;background:#fff;flex-wrap:nowrap}
 body[data-page=viewer] .header-left,body[data-page=viewer] .header-right{width:auto;flex-wrap:nowrap;gap:12px}
 body[data-page=viewer] .logo{font-size:18px;font-weight:700;letter-spacing:-.35px;color:var(--text)}body[data-page=viewer] .logo small{display:none}body[data-page=viewer] .logo span{color:var(--blue)}
-body[data-page=viewer] .badge-live{font-size:11px;font-weight:400;border:1px solid #dce2e9;border-radius:2px;background:#fff;padding:1px 5px}
+body[data-page=viewer] .badge-live{display:inline-flex;font-size:11px;font-weight:500;border:1px solid #dce2e9;border-radius:2px;background:#fff;padding:1px 5px}
 body[data-page=viewer] .classic-toolbar{height:100%;gap:0;padding:0;margin-right:auto;border:0}
 body[data-page=viewer] .toolbar-link{height:100%;padding:0 18px;font-size:13px;background:transparent!important;border-bottom:2px solid transparent}body[data-page=viewer] .toolbar-link .icon{display:none}body[data-page=viewer] .toolbar-link[aria-current=page]{border-bottom-color:var(--blue);color:var(--blue);font-weight:600}
 body[data-page=viewer] .connection{font-size:11px;white-space:nowrap;color:var(--muted)}body[data-page=viewer] .connection i{width:5px;height:5px}body[data-page=viewer] .sync-age{font-size:11px;white-space:nowrap}
@@ -304,11 +303,11 @@ body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:va
 .signal-dialog{padding:0;width:420px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #d9e1e9;border-radius:4px;background:#fff;color:#202d3d}.signal-dialog::backdrop{background:#15283c55}body[data-page=viewer] .signal-dialog .signal-context-group{border:0;border-radius:0}body[data-page=viewer] .signal-dialog .display-menu-heading{position:sticky;top:0;z-index:5;background:#fff}
 .history-actions{display:flex;align-items:center;gap:8px}.mobile-history-toggle,.history-compact-hint{display:none}.step-reference{display:block;font-size:11px;margin-top:2px;color:#8190a2}
 @keyframes quote-tick{0%{background:var(--flash)}100%{background:transparent}}body[data-page=viewer] .quote-flash[data-flash=up]{--flash:var(--up-bg)}body[data-page=viewer] .quote-flash[data-flash=down]{--flash:var(--down-bg)}body[data-page=viewer] .quote-rate.quote-flash{animation:quote-tick .6s ease-out}
-@media(max-width:1100px) and (min-width:768px){body[data-page=viewer] .classic-header{padding-inline:16px;gap:12px}body[data-page=viewer] .toolbar-link{padding-inline:10px}body[data-page=viewer] .sync-age,body[data-page=viewer] .badge-live,body[data-page=viewer] .display-menu-trigger>span{display:none}body[data-page=viewer] .container{padding-inline:16px}body[data-page=viewer] .terminal-layout{grid-template-columns:minmax(0,1fr) 270px;gap:12px}body[data-page=viewer] .chart-range-status{display:none}}
+@media(max-width:1100px) and (min-width:768px){body[data-page=viewer] .classic-header{padding-inline:16px;gap:12px}body[data-page=viewer] .toolbar-link{padding-inline:10px}body[data-page=viewer] .sync-age,body[data-page=viewer] .display-menu-trigger>span{display:none}body[data-page=viewer] .container{padding-inline:16px}body[data-page=viewer] .terminal-layout{grid-template-columns:minmax(0,1fr) 270px;gap:12px}body[data-page=viewer] .chart-range-status{display:none}}
 @media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
  body[data-page=viewer]{--header-h:calc(44px + env(safe-area-inset-top));--quote-h:99px;--dock-h:calc(56px + env(safe-area-inset-bottom));background:#fff}
  body[data-page=viewer] .classic-header{position:sticky;top:0;height:var(--header-h);min-height:var(--header-h);padding:env(safe-area-inset-top) 12px 0;gap:8px}body[data-page=viewer] .header-left,body[data-page=viewer] .header-right{gap:8px;flex-wrap:nowrap;width:auto}body[data-page=viewer] .header-right{margin-left:auto}body[data-page=viewer] .logo{font-size:17px;letter-spacing:-.5px}
- body[data-page=viewer] .badge-live,body[data-page=viewer] .header-pair,body[data-page=viewer] .classic-toolbar,body[data-page=viewer] .sync-age{display:none}body[data-page=viewer] .connection{font-size:11px;gap:5px;max-width:112px}body[data-page=viewer] #connectionLabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}body[data-page=viewer] .display-menu-trigger{min-width:44px;height:44px;min-height:44px;padding:12px}body[data-page=viewer] .display-menu-trigger>span{display:none}
+ body[data-page=viewer] .header-pair,body[data-page=viewer] .classic-toolbar,body[data-page=viewer] .sync-age{display:none}body[data-page=viewer] .connection{font-size:11px;gap:5px;max-width:112px}body[data-page=viewer] #connectionLabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}body[data-page=viewer] .display-menu-trigger{min-width:44px;height:44px;min-height:44px;padding:12px}body[data-page=viewer] .display-menu-trigger>span{display:none}
  body[data-page=viewer] .signal-bar {
   position:static;
   display:grid;
@@ -394,7 +393,6 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
 
 @media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
  body[data-page=viewer] .chart-order-bar {justify-content:stretch}
- body[data-page=viewer] .chart-order-bar>span {display:none}
  body[data-page=viewer] .chart-order-bar .order-side-button {flex:1;min-width:0}
  body[data-page=viewer] .order-dialog {width:100%;max-width:100%}
 }

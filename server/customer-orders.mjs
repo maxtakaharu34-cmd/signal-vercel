@@ -53,9 +53,9 @@ export async function customerOrders(request,env,access,{fetcher,siteHandler}){
   const publicRequest=new Request(env.SITE_ORIGIN+'/api/scene');
   const [record,sceneResponse]=await Promise.all([db('read',commandId),siteHandler(publicRequest,env,null)]);
   if(record.duplicate)return json({orders:orderState(record),outcome:null,duplicate:true});
-  if(!sceneResponse.ok)return json({message:'デモレートを取得できませんでした。'},503);
+  if(!sceneResponse.ok)return json({message:'仮想レートを取得できませんでした。'},503);
   const scene=await sceneResponse.json();
-  if(!validateScene(scene)||!Number.isSafeInteger(scene.version))return json({message:'デモレートを確認できませんでした。'},503);
+  if(!validateScene(scene)||!Number.isSafeInteger(scene.version))return json({message:'仮想レートを確認できませんでした。'},503);
 
   const snapshot=orderState(record),time=Date.now();
   const hasExposure=snapshot.positions.some(position=>!position.close)||snapshot.pending.some(order=>order.status==='pending');

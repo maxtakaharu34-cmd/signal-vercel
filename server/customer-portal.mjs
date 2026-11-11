@@ -4,7 +4,7 @@ import {input,json} from './auth-session.mjs';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const fail=(message,status=400)=>json({message},status);
 const errors={
- PT404:[404,'デモ口座が見つかりません。'],
+ PT404:[404,'仮想口座が見つかりません。'],
  PT409:[409,'他の操作でデータが更新されました。内容を確認してからやり直してください。'],
  PT422:[422,'保有建玉または未約定注文がある間は残高を減額できません。'],
  '42501':[403,'この操作を行う権限がありません。'],
@@ -22,7 +22,7 @@ export async function portalRpc(env,access,fetcher,operation,payload={}){
  });
  const data=await response.json();
  if(!response.ok){
-  const [status,message]=errors[data.code]??[502,'デモ口座との接続を確認してください。'];
+  const [status,message]=errors[data.code]??[502,'仮想口座との接続を確認してください。'];
   throw Object.assign(Error(message),{status});
  }
  return data;
@@ -45,13 +45,13 @@ export async function customerPortal(request,env,access,fetcher,{admin=false}={}
  }
 
  const payload=admin?{customerId:searchParams.get('customer')}:{};
- if(admin&&!uuid.test(payload.customerId??''))return fail('対象のデモ口座を選択してください。');
+ if(admin&&!uuid.test(payload.customerId??''))return fail('対象の仮想口座を選択してください。');
 
  if(pathname.endsWith('/balance')&&admin&&post){
   const body=await input(request);
   const reason=text(body?.reason,120);
   if(!reason||!uuid.test(body?.commandId??'')||!isMoney(body.balance)||!Number.isSafeInteger(body.expectedBalance)){
-   return fail('デモ残高と変更理由を確認してください。');
+   return fail('仮想残高と変更理由を確認してください。');
   }
   return publish(await rpc('adjust',{...payload,commandId:body.commandId,balance:body.balance,expectedBalance:body.expectedBalance,reason}));
  }
