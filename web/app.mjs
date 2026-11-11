@@ -1,7 +1,8 @@
 import {createTerminalChart} from './terminal-chart.mjs';
 import {validAutomation,newerFrame,createMarketBarReader} from './timeline.mjs';
 import {CHART_PERIODS,marketClock} from './market-bars.mjs';
-import {QUOTE_SIDES,quoteCandles} from './market-quotes.mjs';
+import {QUOTE_SIDES,quoteCandles,quotePair} from './market-quotes.mjs';
+import {mountOrderPanel} from './order-panel.mjs';
 import {createSiteClient} from './site-client.mjs';
 import {createEngine,initialCheckpoint,DEFAULT_SIGNAL,validateScene} from './engine.mjs';
 import {renderScene,renderEvents,chartHitIndex,barTimestamp} from './render.mjs';
@@ -19,6 +20,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  let marketView = null;
  let chartRows = null;
  let chartFrame = null;
+ let orderPanel = null;
  const displayRows = () => chartRows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
  const savePreferences=()=>saveDisplayPreferences(window,{...preferences,maxBars,changeBase,ma,bands,study});
  if(!adminPage){document.documentElement.dataset.colors=preferences.colors;if($('colorConvention'))$('colorConvention').value=preferences.colors;if($('changeBase'))$('changeBase').value=changeBase;if($('showMa'))$('showMa').checked=ma;if($('showBands'))$('showBands').checked=bands;if($('chartStudy'))$('chartStudy').value=study;}
@@ -35,7 +37,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  const canRead=()=>!!session||(!adminPage&&client?.siteAuth===true);
  const automated=()=>validAutomation(published.checkpoint?.automation);
  function markRead(){lastReadAt=Date.now();renderSyncInfo()}
- function renderSyncInfo(){const offline=window.navigator.onLine===false,age=lastReadAt?Math.floor((Date.now()-lastReadAt)/1000):null;setText('lastSynced',age===null?'未同期':age<2?'たった今同期':age<60?age+'秒前に同期':Math.floor(age/60)+'分前に同期');if($('lastSynced'))$('lastSynced').title=lastReadAt?new Date(lastReadAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'まだ同期していません';const stale=ready&&(offline||age===null||age>12);document.body.dataset.stale=String(stale);if($('syncNotice'))$('syncNotice').hidden=!(stale||loadFailed);setText('syncNoticeText',loadFailed?'チャートを取得できませんでした。「再同期」で読み込み直せます。':offline?'オフラインです。表示は最後に同期した内容です。':'同期が遅れています。表示は最後に受け取った内容です。');if(stale)connection(offline?'オフライン':'同期を確認','error')}
+ function renderSyncInfo(){const offline=window.navigator.onLine===false,age=lastReadAt?Math.floor((Date.now()-lastReadAt)/1000):null;setText('lastSynced',age===null?'未同期':age<2?'たった今同期':age<60?age+'秒前に同期':Math.floor(age/60)+'分前に同期');if($('lastSynced'))$('lastSynced').title=lastReadAt?new Date(lastReadAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'まだ同期していません';const stale=ready&&(offline||age===null||age>12);document.body.dataset.stale=String(stale);if($('syncNotice'))$('syncNotice').hidden=!(stale||loadFailed);setText('syncNoticeText',loadFailed?'チャートを取得できませんでした。「再同期」で読み込み直せます。':offline?'オフラインです。表示は最後に同期した内容です。':'同期が遅れています。表示は最後に受け取った内容です。');if(stale)connection(offline?'オフライン':'同期を確認','error');orderPanel?.updateQuote()}
  function scheduleApply(){window.clearTimeout(applyTimer);applyTimer=null;if(!autoApply||!dirty||!ready||!isAdmin||saving||conflict||playing||automated()||destroyed)return;applyTimer=window.setTimeout(()=>{applyTimer=null;void publish('設定を自動反映',true)},700)}
  const openAuth=()=>$('adminPin')?.focus();
  function toast(text){setText('toast',text);$('toast').hidden=false;window.clearTimeout(toastTimer);toastTimer=window.setTimeout(()=>$('toast').hidden=true,3000)}
@@ -163,7 +165,7 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if($('nextCandle'))$('nextCandle').onclick=()=>moveInspection(1);
  function setChartFocus(value){if(adminPage)return;chartFocused=value;document.body.dataset.chartFocus=String(value);const button=$('chartFocus');if(button){button.setAttribute('aria-pressed',String(value));button.querySelector('span').textContent=value?'閉じる':'拡大';button.setAttribute('aria-label',value?'チャートの拡大を閉じる':'チャートを拡大')}window.requestAnimationFrame(()=>{if(!destroyed)paint()})}
  if($('chartFocus'))$('chartFocus').onclick=()=>setChartFocus(!chartFocused);
- const escapeChart=event=>{if(event.key==='Escape'&&chartFocused){setChartFocus(false);$('chartFocus')?.focus()}};document.addEventListener('keydown',escapeChart);
+ const escapeChart=event=>{if(event.key==='Escape'&&chartFocused&&!document.querySelector('dialog[open]')){setChartFocus(false);$('chartFocus')?.focus()}};document.addEventListener('keydown',escapeChart);
  if($('historyColumns'))$('historyColumns').onclick=()=>{const button=$('historyColumns'),full=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(full));button.textContent=full?'簡易表示に戻す':'4本値を表示';document.body.dataset.historyFull=String(full)};
  if($('export'))$('export').onclick=()=>{
   const record=adminPage?draft():published,rows=displayRows();
@@ -183,14 +185,14 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  if($('exportScene'))$('exportScene').onclick=()=>{if(!ready||published.version<1)return;saveDownload(window,document,sceneJson(published),'demo-scene-v'+published.version+'.json','application/json');toast('公開済みの設定を書き出しました')};
  if($('exportEvents'))$('exportEvents').onclick=()=>{if(!ready||!eventRows.length)return;saveDownload(window,document,eventsCsv(eventRows),'demo-history-v'+published.version+'.csv','text/csv;charset=utf-8');toast('取得済みの変更履歴を書き出しました（最大30件）')};
  const dataTabs=[...document.querySelectorAll('[data-data-tab]')],dockTabs=[...document.querySelectorAll('[data-dock-view]')];
- function markView(key){if(adminPage)return;document.body.dataset.view=key;for(const button of dockTabs){const selected=button.dataset.dockView===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1}document.querySelectorAll('.classic-toolbar [data-open-tab],.classic-toolbar [data-view-chart]').forEach(e=>{const current=(e.dataset.openTab||'chart')===key;if(current)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current')});window.cancelAnimationFrame(viewFrame);viewFrame=window.requestAnimationFrame(()=>{if(!destroyed)paint()})}
+ function markView(key){if(adminPage)return;document.body.dataset.view=key;if(key==='trades')void orderPanel?.refresh();for(const button of dockTabs){const selected=button.dataset.dockView===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1}document.querySelectorAll('.classic-toolbar [data-open-tab],.classic-toolbar [data-view-chart]').forEach(e=>{const current=(e.dataset.openTab||'chart')===key;if(current)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current')});window.cancelAnimationFrame(viewFrame);viewFrame=window.requestAnimationFrame(()=>{if(!destroyed)paint()})}
  function selectDataTab(key,focus=false){if(!dataTabs.some(e=>e.dataset.dataTab===key))return;for(const button of dataTabs){const selected=button.dataset.dataTab===key;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;const panel=document.getElementById(button.getAttribute('aria-controls'));if(panel)panel.hidden=!selected;if(selected&&focus)button.focus()}markView(key)}
  for(const [index,button] of dataTabs.entries()){button.onclick=()=>selectDataTab(button.dataset.dataTab);button.onkeydown=event=>{let next;if(event.key==='ArrowRight')next=(index+1)%dataTabs.length;else if(event.key==='ArrowLeft')next=(index+dataTabs.length-1)%dataTabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=dataTabs.length-1;else return;event.preventDefault();selectDataTab(dataTabs[next].dataset.dataTab,true)}}
- const hashFor={chart:'#dashboard',candles:'#history',events:'#timeline',indicators:'#panel-indicators'};
+ const hashFor={chart:'#dashboard',candles:'#history',events:'#timeline',indicators:'#panel-indicators',trades:'#trades'};
  const compactViewer=()=>window.matchMedia('(max-width: 767px), (orientation: landscape) and (max-height: 500px) and (max-width: 1000px)').matches;
  function openView(key){if(key!=='chart'&&chartFocused)setChartFocus(false);if(key==='chart')markView('chart');else selectDataTab(key);window.history.replaceState(null,'',hashFor[key]);if(!compactViewer()){const el=key==='chart'?$('dashboard'):$('dataWorkspace');el?.scrollIntoView?.({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}else window.scrollTo?.({top:0,behavior:'instant'})}
  for(const [index,button] of dockTabs.entries()){button.onclick=()=>openView(button.dataset.dockView);button.onkeydown=event=>{let next;if(event.key==='ArrowRight')next=(index+1)%dockTabs.length;else if(event.key==='ArrowLeft')next=(index+dockTabs.length-1)%dockTabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=dockTabs.length-1;else return;event.preventDefault();openView(dockTabs[next].dataset.dockView);dockTabs[next].focus()}}
- const hashTab=()=>{const key={'#history':'candles','#timeline':'events','#panel-candles':'candles','#panel-events':'events','#panel-indicators':'indicators'}[window.location.hash];if(key)selectDataTab(key);else markView('chart')};hashTab();window.addEventListener('hashchange',hashTab);
+ const hashTab=()=>{const key={'#history':'candles','#timeline':'events','#panel-candles':'candles','#panel-events':'events','#panel-indicators':'indicators','#trades':'trades','#panel-trades':'trades'}[window.location.hash];if(key)selectDataTab(key);else markView('chart')};hashTab();window.addEventListener('hashchange',hashTab);
  document.querySelectorAll('[data-open-tab]').forEach(link=>link.onclick=event=>{event.preventDefault();openView(link.dataset.openTab)});document.querySelectorAll('[data-view-chart]').forEach(link=>link.onclick=event=>{event.preventDefault();openView('chart')});
  if($('colorConvention'))$('colorConvention').onchange=event=>{preferences.colors=event.target.value==='intl'?'intl':'jp';document.documentElement.dataset.colors=preferences.colors;savePreferences();paint()};
  if($('changeBase'))$('changeBase').onchange=event=>{changeBase=event.target.value==='period'?'period':'previous';savePreferences();paint()};
@@ -234,8 +236,17 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  const beforeUnload=event=>{if(adminPage&&(dirty||automationDraft||saving)){event.preventDefault();event.returnValue=''}};window.addEventListener('beforeunload',beforeUnload);
  document.querySelectorAll('[data-viewbars]').forEach(button=>button.onclick=()=>{maxBars=Number(button.dataset.viewbars);document.querySelectorAll('[data-viewbars]').forEach(e=>{const selected=e===button;e.classList.toggle('active',selected);e.setAttribute('aria-pressed',String(selected))});if(!adminPage)savePreferences();hover=null;selectedTime=null;chartController?.follow();paint()});
  let resizeTimer=null;const resize=()=>{window.clearTimeout(resizeTimer);resizeTimer=window.setTimeout(()=>{if(!chartController){hover=null;selectedTime=null}if($('signalDialog')?.open&&!compactViewer())$('signalDialog').close();paint()},120)};window.addEventListener('resize',resize);
+ if(!adminPage){
+  orderPanel=mountOrderPanel({
+   document,window,
+   getQuote:()=>ready&&document.body.dataset.stale==='false'?quotePair(published.checkpoint.rows.at(-1).close):null,
+   showTrades:()=>openView('trades'),
+   notify:toast,
+  });
+  if(document.body.dataset.view==='trades')void orderPanel.refresh();
+ }
  const clock=()=>{renderOwnerAuth();setText('clock',new Date().toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false})+' JST');renderSyncInfo()};clock();const clockTimer=window.setInterval(clock,1000);paint();
  try{if(!client)client=createSiteClient(window);repository=createSceneRepository(client);const initial=!adminPage&&client.siteAuth?{data:{session:null}}:await client.auth.getSession();if(initial.error)throw initial.error;session=initial.data.session;await loadSession();const listener=client.auth.onAuthStateChange((event,next)=>{if(session?.user?.id===next?.user?.id&&ready&&event!=='SIGNED_OUT'){session=next;return}session=next;factorId=null;window.setTimeout(()=>{if(!destroyed)void loadSession()},0)});authUnsubscribe=()=>listener.data.subscription.unsubscribe();}catch(error){connection('接続を確認','error');authMessage(error.message);gates();setText('gateMessage','接続を確認できません。管理権限は付与されていません。')}
- return {destroy(){destroyed=true;++epoch;chartController?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
+ return {destroy(){destroyed=true;++epoch;chartController?.destroy();orderPanel?.destroy();$('signalDialog')?.removeEventListener('close',restoreSignal);restoreSignal();stop();detach();authUnsubscribe();window.clearInterval(clockTimer);window.clearTimeout(toastTimer);window.clearTimeout(resizeTimer);window.clearTimeout(flashTimer);window.cancelAnimationFrame(viewFrame);document.removeEventListener('click',closeMenu);document.removeEventListener('keydown',escapeChart);window.removeEventListener('resize',resize);window.removeEventListener('hashchange',hashTab);window.removeEventListener('online',online);window.removeEventListener('offline',offline);document.removeEventListener('visibilitychange',visibility);window.removeEventListener('beforeunload',beforeUnload)},state:()=>({published:structuredClone(published),draft:draft(),dirty,conflict,isAdmin,ready,autoApply}),refresh:async()=>receive(await repository.load())};
 }
 if(typeof globalThis.document!=='undefined'&&typeof globalThis.window!=='undefined')void mountApp();

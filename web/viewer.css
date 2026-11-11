@@ -92,6 +92,85 @@ body[data-page=viewer] .quote-spread b {
   font-weight:500;
 }
 body[data-page=viewer] .chart-rate-compact {display:none}
+
+body[data-page=viewer] .chart-actions {flex:none;min-width:0}
+body[data-page=viewer] .chart-order-bar {
+  min-height:49px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+  padding:2px 8px;
+  border-top:1px solid var(--border);
+  background:var(--panel2);
+  color:var(--muted);
+  font-size:11px;
+  white-space:nowrap;
+}
+body[data-page=viewer] .chart-order-bar>span {margin-inline-end:4px}
+body[data-page=viewer] .order-side-button {
+  min-width:80px;
+  min-height:44px;
+  padding:0 10px;
+  border:1px solid transparent;
+  border-radius:2px;
+  color:#fff;
+  background:var(--blue);
+  font-size:14px;
+  font-weight:650;
+}
+body[data-page=viewer] .order-side-button:is([data-order-side=sell],[data-side=sell]) {background:#285e90}
+body[data-page=viewer] .order-side-button:is([data-order-side=buy],[data-side=buy]) {background:#a73543}
+body[data-page=viewer] .order-side-button:disabled {opacity:.5}
+body[data-page=viewer] .order-side-button:focus-visible {outline-offset:-3px;outline-color:white}
+body[data-page=viewer] .order-dialog {width:min(420px,calc(100vw - 24px))}
+body[data-page=viewer] .order-form {display:grid;gap:13px;padding:4px 18px 18px}
+body[data-page=viewer] .order-instrument {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--border);
+  padding:7px 0;
+}
+body[data-page=viewer] .order-instrument strong {font-size:15px}
+body[data-page=viewer] .order-instrument span,
+body[data-page=viewer] :is(.order-note,.order-section-heading span,.order-entry small) {
+  color:var(--muted);
+  font-size:11px;
+}
+body[data-page=viewer] .order-facts {display:grid;gap:8px;margin:0;font-size:13px}
+body[data-page=viewer] .order-facts>div {display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+body[data-page=viewer] .order-facts dd {margin:0;font-weight:600}
+body[data-page=viewer] #orderRate {font-size:19px;font-weight:500}
+body[data-page=viewer] .order-quantity {display:grid;gap:4px;font-size:12px;font-weight:600}
+body[data-page=viewer] .order-quantity input {min-height:44px;font-size:16px}
+body[data-page=viewer] .order-note {margin:0}
+body[data-page=viewer] .order-error {margin:0;color:#8e2e34;font-size:12px}
+body[data-page=viewer] .order-submit {width:100%}
+body[data-page=viewer] .orders-section {padding:12px 16px;border-top:1px solid var(--border)}
+body[data-page=viewer] .orders-section h3 {font-size:13px;margin:0 0 4px;font-weight:650}
+body[data-page=viewer] .order-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+body[data-page=viewer] .order-list {padding:0;margin:0;list-style:none}
+body[data-page=viewer] :is(.order-position,.order-fill) {
+  display:grid;
+  align-items:center;
+  gap:8px;
+  padding:5px 0;
+  border-bottom:1px solid var(--border);
+}
+body[data-page=viewer] .order-position {grid-template-columns:39px minmax(55px,1fr) minmax(58px,1fr) 48px}
+body[data-page=viewer] .order-fill {grid-template-columns:39px minmax(62px,1fr) auto}
+body[data-page=viewer] .order-entry {display:grid;gap:1px;font-size:13px}
+body[data-page=viewer] .order-entry b {font-weight:550}
+body[data-page=viewer] .order-fill-time {text-align:right}
+body[data-page=viewer] .order-fill-time time {font-size:11px}
+body[data-page=viewer] .order-profit {justify-self:end;font-size:12px;font-weight:600;white-space:nowrap}
+body[data-page=viewer] .order-profit[data-profit=up] {color:var(--up)}
+body[data-page=viewer] .order-profit[data-profit=down] {color:var(--down)}
+body[data-page=viewer] .order-direction[data-side=buy] {color:#9d2938}
+body[data-page=viewer] .order-direction[data-side=sell] {color:#245b8b}
+body[data-page=viewer] .order-close-position {min-height:44px;padding:0 4px;border:1px solid var(--border);background:#fff;font-size:11px}
+body[data-page=viewer] #ordersStatus {padding:8px 16px}
 body[data-page=viewer][data-chart-focus=true] .chart-rate-compact {
   display:inline;
   color:var(--blue);
@@ -240,7 +319,7 @@ body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:va
  }body[data-page=viewer] .chart-bottom{padding-inline:6px;gap:3px;height:44px;min-height:44px}body[data-page=viewer] .chart-selection{flex:1;min-width:0;font-size:11px}body[data-page=viewer] .chart-range-status{display:none}body[data-page=viewer] .chart-follow{font-size:11px;padding-inline:6px}body[data-page=viewer] #chartFocus{margin-left:auto;min-width:48px}
  body[data-page=viewer] .signal-column{grid-row:2;min-height:0;margin:0;display:block}body[data-page=viewer] .signal-column>.signal-context-group{display:none}body[data-page=viewer] .mobile-signal-toggle{--dir:var(--wait);--dir-bg:var(--wait-bg);height:44px;min-height:44px;width:100%;padding:0 12px;display:flex;align-items:center;gap:8px;text-align:left;border:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0;background:var(--panel2);box-shadow:none;color:var(--dir)}body[data-page=viewer] .mobile-signal-caption{display:block;color:var(--text);font-size:11px;font-weight:600;white-space:nowrap}body[data-page=viewer] #mobileSignalDirection{font-size:14px;font-weight:600;white-space:nowrap;line-height:1.2}body[data-page=viewer] #mobileSignalDirection::before{font-size:9px;vertical-align:1px;margin-right:3px}body[data-page=viewer] #mobileSignalLevel{font-size:11px;white-space:nowrap;font-weight:500;background:none;padding:0}
  body[data-page=viewer] .mobile-level-scale{display:flex;align-items:center;gap:2px;width:34px;padding:0;margin:0;flex-shrink:0}body[data-page=viewer] .mobile-level-scale>span{height:10px;width:4px;background:#e5eaf0;border:0;border-radius:0}body[data-page=viewer] .mobile-level-scale>.active,body[data-page=viewer] .mobile-level-scale>.passed{background:var(--dir)}body[data-page=viewer] .signal-bar-label{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}body[data-page=viewer] .mobile-signal-toggle>.icon{margin-left:auto;width:14px;color:#8693a2}
- body[data-page=viewer] .dock{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:fixed;inset:auto 0 0;height:var(--dock-h);min-height:var(--dock-h);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);z-index:40;border-top:1px solid #dce3eb;background:#fff;box-shadow:none}body[data-page=viewer] .dock button{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;min-height:55px;padding:4px 0;border:0;border-radius:0;background:#fff;color:var(--muted);font-size:11px;font-weight:500}body[data-page=viewer] .dock .icon{width:20px;height:20px;stroke-width:1.7;background:none;box-shadow:none;border-radius:0}body[data-page=viewer] .dock [aria-selected=true]{color:var(--blue);background:#e7eff7;font-weight:650}
+ body[data-page=viewer] .dock{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;inset:auto 0 0;height:var(--dock-h);min-height:var(--dock-h);padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);z-index:40;border-top:1px solid #dce3eb;background:#fff;box-shadow:none}body[data-page=viewer] .dock button{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;min-height:55px;padding:4px 0;border:0;border-radius:0;background:#fff;color:var(--muted);font-size:11px;font-weight:500}body[data-page=viewer] .dock .icon{width:20px;height:20px;stroke-width:1.7;background:none;box-shadow:none;border-radius:0}body[data-page=viewer] .dock [aria-selected=true]{color:var(--blue);background:#e7eff7;font-weight:650}
  body[data-page=viewer][data-view=chart] #dataWorkspace,body[data-page=viewer]:not([data-view=chart]) #dashboard{display:none}body[data-page=viewer] .data-tabs{display:none}body[data-page=viewer] .data-workspace{border:0;border-radius:0}body[data-page=viewer] .data-workspace [role=tabpanel]{height:auto;min-height:calc(100dvh - 176px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow:visible}body[data-page=viewer] .data-workspace .panel-heading{padding:14px 16px;min-height:64px}body[data-page=viewer] .data-workspace .panel-heading h2{font-size:16px;font-weight:600}
  body[data-page=viewer] .history-actions{gap:4px}body[data-page=viewer] .mobile-history-toggle{display:inline-flex}body[data-page=viewer] .history-actions .button{padding-inline:8px;font-size:11px;min-height:44px}body[data-page=viewer] .history-compact-hint{display:inline}body[data-page=viewer] .history-full-hint{display:none}body[data-page=viewer] .table-scroll-hint,body[data-page=viewer] .history-range{padding-inline:16px;font-size:11px}
  body[data-page=viewer]:not([data-history-full=true]) #history table{min-width:0;table-layout:fixed;font-size:12px}body[data-page=viewer]:not([data-history-full=true]) #history th,body[data-page=viewer]:not([data-history-full=true]) #history td{padding:14px 16px}body[data-page=viewer]:not([data-history-full=true]) #history :is(th,td):is(:nth-child(2),:nth-child(3),:nth-child(4)){display:none}body[data-page=viewer]:not([data-history-full=true]) #history .step-reference{display:none}body[data-page=viewer][data-history-full=true] .history-compact-hint{display:none}body[data-page=viewer][data-history-full=true] .history-full-hint{display:inline}
@@ -281,4 +360,23 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
 }
 @media(max-width:350px){
  body[data-page=viewer][data-chart-focus=true] .chart-indicator-label {display:none}
+}
+
+@media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
+ body[data-page=viewer] .chart-order-bar {justify-content:stretch}
+ body[data-page=viewer] .chart-order-bar .order-side-button {flex:1;min-width:0}
+ body[data-page=viewer] .order-dialog {width:100%;max-width:100%}
+}
+@media(orientation:landscape) and (max-height:500px) and (max-width:1000px){
+ body[data-page=viewer] .chart-actions {display:flex}
+ body[data-page=viewer] .chart-actions .chart-bottom {flex:1;min-width:0}
+ body[data-page=viewer] .chart-order-bar {
+  flex:0 0 146px;
+  min-height:44px;
+  gap:4px;
+  padding:0 4px;
+  border-inline-start:1px solid var(--border);
+ }
+ body[data-page=viewer] .chart-order-bar>span {display:none}
+ body[data-page=viewer] .chart-order-bar .order-side-button {border-radius:0}
 }
