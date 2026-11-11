@@ -1,19 +1,40 @@
-import {createPaperOrderStore,closeSide,orderPrice,positionProfit,ORDER_LABELS} from './paper-orders.mjs';
+import {createPaperOrderStore,closeSide,orderPrice,positionProfit,validOrderTrigger,ORDER_LABELS,ORDER_TYPES} from './paper-orders.mjs';
 
 const number = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFractionDigits:3});
 const signed = new Intl.NumberFormat('ja-JP', {minimumFractionDigits:3,maximumFractionDigits:3,signDisplay:'exceptZero'});
 const clock = new Intl.DateTimeFormat('ja-JP', {timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 
-export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
+export function mountOrderPanel({document,window,getQuote,getScene,showTrades,notify}) {
  const $ = id => document.getElementById(id);
  const dialog = $('orderDialog');
  const form = $('orderForm');
  const quantity = $('orderQuantity');
+ const orderType = $('orderType');
+ const target = $('orderTarget');
  const submit = $('orderSubmit');
  const store = createPaperOrderStore(window);
  const triggers = document.querySelectorAll('[data-order-side]');
  let action = null, busy = false, readId = 0, destroyed = false;
  let marks = [];
+ let hasPending = false, matching = false, lastMatched = null;
+ const channel = typeof window.BroadcastChannel === 'function' ? new window.BroadcastChannel('fx-demo-order-updates') : null;
+
+ function matchLatest() {
+  const scene = getScene();
+  if (!scene || !getQuote() || !hasPending || matching || lastMatched === scene || destroyed) return;
+  lastMatched = scene;
+  matching = true;
+  void store.match(scene.checkpoint,Date.now()).then(async outcome=>{
+   if (destroyed || (!outcome.filled && !outcome.review)) return;
+   if (outcome.filled) notify(outcome.filled+'件のデモ注文が約定しました。');
+   channel?.postMessage('changed');
+   await refresh();
+  }).catch(()=>{
+   if (destroyed) return;
+   set('ordersStatus','注文の照合に失敗しました。次の価格更新で再試行します。');
+   $('ordersStatus').hidden = false;
+  }).finally(()=>{matching=false;matchLatest();});
+ }
 
  function set(id, value) {
   const element = $(id);
@@ -29,6 +50,7 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
 
  function updateQuote() {
   const quote = getQuote();
+  matchLatest();
   for (const trigger of triggers) trigger.disabled = !quote;
   for (const {position, value, button} of marks) {
    button.disabled = !quote;
@@ -46,6 +68,20 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
   submit.disabled = busy || !quote;
  }
 
+ function updateOrderType() {
+  const type=orderType.value;
+  const conditional=!!action && !action.position && type!=='market';
+  $('orderTargetRow').hidden=!conditional;
+  target.disabled=!conditional;
+  target.required=conditional;
+  if(conditional){
+   const below=(action.side==='buy')===(type==='limit');
+   set('orderTargetHelp','現在の'+(action.side==='buy'?'買値':'売値')+'より'+(below?'低い':'高い')+'レートを指定');
+  }
+  set('orderNote',conditional?'条件を満たした仮想レートで約定します。このブラウザーの価格同期時に照合します。':'注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。');
+  $('orderError').hidden=true;
+ }
+
  function open(side, position=null) {
   if (!getQuote() || dialog.open) return;
   action = {side, position};
@@ -54,22 +90,51 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
   $('orderDirection').dataset.side = side;
   $('orderRateType').textContent = side === 'buy' ? '買値（Ask）' : '売値（Bid）';
   $('orderProfitRow').hidden = !position;
+  $('orderTypeRow').hidden = !!position;
+  $('orderCloseType').hidden = !position;
+  orderType.value = 'market';
+  target.value = '';
   quantity.value = String(position?.quantity ?? 1);
   quantity.readOnly = !!position;
   submit.textContent = position ? '決済を確定' : ORDER_LABELS[side] + '注文を確定';
   submit.dataset.side = side;
-  $('orderError').hidden = true;
+  updateOrderType();
   dialog.showModal();
   updateQuote();
  }
 
- function render(positions) {
+ function render({positions,pending}) {
+  hasPending=pending.some(order=>order.status==='pending');
   const openPositions = positions.filter(position => !position.close).sort((a,b)=>b.open.time-a.open.time);
   const fills = positions.flatMap(position => [
-   {side:position.side,quantity:position.quantity,kind:'新規',...position.open},
+   {side:position.side,quantity:position.quantity,kind:position.type?'新規 '+ORDER_TYPES[position.type]:'新規',...position.open},
    ...(position.close ? [{side:closeSide(position.side),quantity:position.quantity,kind:'決済',profit:positionProfit(position,position.close.price),...position.close}] : []),
   ]).sort((a,b)=>b.time-a.time).slice(0,50);
 
+  $('orderPending').replaceChildren(...pending.sort((a,b)=>b.time-a.time).map(order=>{
+   const row=element('li','','order-pending');
+   const side=element('b',ORDER_LABELS[order.side],'order-direction');
+   side.dataset.side=order.side;
+   const info=element('span','','order-entry');
+   info.append(element('b',number.format(order.target),'mono'),element('small',ORDER_TYPES[order.type]+' · 数量 '+order.quantity));
+   const status=element('span',order.status==='review'?'履歴不足 · 停止':'待機中','order-pending-status');
+   status.dataset.state=order.status;
+   const button=element('button','取消','order-close-position');
+   button.type='button';
+   button.setAttribute('aria-label',ORDER_LABELS[order.side]+ORDER_TYPES[order.type]+'注文を取り消す');
+   button.onclick=async()=>{
+    button.disabled=true;
+    try{
+     await store.cancel(order.id);
+     notify('デモ注文を取り消しました。');
+     channel?.postMessage('changed');
+    }catch(error){notify(error.message);}
+    await refresh();
+   };
+   row.append(side,info,status,button);
+   return row;
+  }));
+  $('orderEmptyPending').hidden=pending.length>0;
   marks = [];
   $('orderPositions').replaceChildren(...openPositions.map(position=>{
    const row = element('li','','order-position');
@@ -106,10 +171,10 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
  async function refresh() {
   const id = ++readId;
   try {
-   const positions = await store.read();
+   const orders = await store.read();
    if (destroyed || id !== readId) return;
    $('ordersStatus').hidden = true;
-   render(positions);
+   render(orders);
   } catch {
    if (destroyed || id !== readId) return;
    set('ordersStatus','このブラウザーでデモ注文の保存領域を開けません。');
@@ -122,6 +187,13 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
   const quote = getQuote();
   if (busy || !action || !quote || !form.reportValidity()) return;
   const {side,position} = action;
+  const type=position?'market':orderType.value;
+  const condition=target.valueAsNumber;
+  if(type!=='market'&&!validOrderTrigger(side,type,condition,quote)){
+   set('orderError',$('orderTargetHelp').textContent+'してください。');
+   $('orderError').hidden=false;
+   return;
+  }
   const price = orderPrice(side,quote),time = Date.now();
   busy = true;
   $('orderDialogClose').disabled = true;
@@ -129,7 +201,12 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
   updateQuote();
   try {
    if (position) await store.close(position.id,quote,time);
-   else await store.place({side,quantity:quantity.valueAsNumber,price,time});
+   else if(type==='market')await store.place({side,quantity:quantity.valueAsNumber,price,time});
+   else{
+    const row=getScene().checkpoint.rows.at(-1);
+    await store.placePending({side,quantity:quantity.valueAsNumber,type,target:condition,cursor:{time:row.time,close:row.close},time});
+    lastMatched=null;
+   }
   } catch(error) {
    set('orderError',error.message==='この建玉はすでに決済されています。'?error.message:'保存できませんでした。ブラウザーの保存設定を確認してください。');
    $('orderError').hidden = false;
@@ -140,14 +217,18 @@ export function mountOrderPanel({document,window,getQuote,showTrades,notify}) {
    updateQuote();
   }
   dialog.close();
-  notify((position?'決済':ORDER_LABELS[side]+'注文')+'が約定しました。');
+  notify(type==='market'?(position?'決済':ORDER_LABELS[side]+'注文')+'が約定しました。':ORDER_TYPES[type]+'注文を受け付けました。');
+  channel?.postMessage('changed');
   showTrades();
  };
+ orderType.onchange=updateOrderType;
  $('orderDialogClose').onclick = () => dialog.close();
  const cancel = event => {if (busy) event.preventDefault();};
  dialog.addEventListener('cancel',cancel);
  for (const trigger of triggers) trigger.onclick = () => open(trigger.dataset.orderSide);
- const onFocus = () => {if (document.body.dataset.view === 'trades') void refresh();};
+ const onFocus = () => {void refresh();};
  window.addEventListener('focus',onFocus);
- return {updateQuote,refresh,destroy(){destroyed=true;dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
+ if(channel)channel.onmessage=onFocus;
+ void refresh();
+ return {updateQuote,refresh,destroy(){destroyed=true;channel?.close();dialog.removeEventListener('cancel',cancel);window.removeEventListener('focus',onFocus);}};
 }

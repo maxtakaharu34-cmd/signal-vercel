@@ -240,10 +240,10 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
   orderPanel=mountOrderPanel({
    document,window,
    getQuote:()=>ready&&document.body.dataset.stale==='false'?quotePair(published.checkpoint.rows.at(-1).close):null,
+   getScene:()=>ready?published:null,
    showTrades:()=>openView('trades'),
    notify:toast,
   });
-  if(document.body.dataset.view==='trades')void orderPanel.refresh();
  }
  const clock=()=>{renderOwnerAuth();setText('clock',new Date().toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false})+' JST');renderSyncInfo()};clock();const clockTimer=window.setInterval(clock,1000);paint();
  try{if(!client)client=createSiteClient(window);repository=createSceneRepository(client);const initial=!adminPage&&client.siteAuth?{data:{session:null}}:await client.auth.getSession();if(initial.error)throw initial.error;session=initial.data.session;await loadSession();const listener=client.auth.onAuthStateChange((event,next)=>{if(session?.user?.id===next?.user?.id&&ready&&event!=='SIGNED_OUT'){session=next;return}session=next;factorId=null;window.setTimeout(()=>{if(!destroyed)void loadSession()},0)});authUnsubscribe=()=>listener.data.subscription.unsubscribe();}catch(error){connection('接続を確認','error');authMessage(error.message);gates();setText('gateMessage','接続を確認できません。管理権限は付与されていません。')}

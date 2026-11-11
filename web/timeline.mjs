@@ -39,6 +39,27 @@ function simulationCandle(price, originTime, step) {
  return {time:originTime + step, open, high, low, close};
 }
 
+// Orders use the closes that the price display can quote. Recover an unseen
+// close from the current anchor only when its original path is still known.
+export function createExecutionPriceReader(checkpoint) {
+ const {automation:anchor, rows} = checkpoint;
+ const closes = new Map(rows.map(row => [row.time,row.close]));
+ const first = Math.min(rows[0].time,anchor?.originTime ?? Infinity);
+ const last = rows.at(-1).time;
+ let price;
+ return {
+  first, last,
+  closeAt(time) {
+   if (time < first || time > last) return null;
+   if (!closes.has(time) && validAutomation(anchor) && time >= anchor.originTime) {
+    price ??= priceSampler(checkpoint);
+    closes.set(time,price(time-anchor.originTime));
+   }
+   return closes.get(time) ?? null;
+  },
+ };
+}
+
 // Fill only the part of the visible history missing from the server frame.
 // Subsequent frames extend the cached bars with the same authoritative samples.
 export function createMarketBarReader() {

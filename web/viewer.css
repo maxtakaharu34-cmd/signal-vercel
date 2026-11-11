@@ -143,7 +143,8 @@ body[data-page=viewer] .order-facts>div {display:flex;justify-content:space-betw
 body[data-page=viewer] .order-facts dd {margin:0;font-weight:600}
 body[data-page=viewer] #orderRate {font-size:19px;font-weight:500}
 body[data-page=viewer] .order-quantity {display:grid;gap:4px;font-size:12px;font-weight:600}
-body[data-page=viewer] .order-quantity input {min-height:44px;font-size:16px}
+body[data-page=viewer] .order-quantity :is(input,select) {min-height:44px;font-size:16px}
+body[data-page=viewer] .order-quantity small {color:var(--muted);font-weight:400}
 body[data-page=viewer] .order-note {margin:0}
 body[data-page=viewer] .order-error {margin:0;color:#8e2e34;font-size:12px}
 body[data-page=viewer] .order-submit {width:100%}
@@ -151,14 +152,16 @@ body[data-page=viewer] .orders-section {padding:12px 16px;border-top:1px solid v
 body[data-page=viewer] .orders-section h3 {font-size:13px;margin:0 0 4px;font-weight:650}
 body[data-page=viewer] .order-section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:10px}
 body[data-page=viewer] .order-list {padding:0;margin:0;list-style:none}
-body[data-page=viewer] :is(.order-position,.order-fill) {
+body[data-page=viewer] :is(.order-position,.order-pending,.order-fill) {
   display:grid;
   align-items:center;
   gap:8px;
   padding:5px 0;
   border-bottom:1px solid var(--border);
 }
-body[data-page=viewer] .order-position {grid-template-columns:39px minmax(55px,1fr) minmax(58px,1fr) 48px}
+body[data-page=viewer] :is(.order-position,.order-pending) {grid-template-columns:39px minmax(55px,1fr) minmax(58px,1fr) 48px}
+body[data-page=viewer] .order-pending-status {justify-self:end;color:var(--muted);font-size:11px;white-space:nowrap}
+body[data-page=viewer] .order-pending-status[data-state=review] {color:#8e2e34}
 body[data-page=viewer] .order-fill {grid-template-columns:39px minmax(62px,1fr) auto}
 body[data-page=viewer] .order-entry {display:grid;gap:1px;font-size:13px}
 body[data-page=viewer] .order-entry b {font-weight:550}
@@ -379,4 +382,8 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
  }
  body[data-page=viewer] .chart-order-bar>span {display:none}
  body[data-page=viewer] .chart-order-bar .order-side-button {border-radius:0}
+}
+@media(max-width:767px) and (max-height:620px){
+ body[data-page=viewer] .order-form {gap:8px;padding-block-end:12px}
+ body[data-page=viewer] .order-facts {gap:5px}
 }

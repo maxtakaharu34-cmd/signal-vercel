@@ -25,14 +25,16 @@ const orderDialog=()=>`<dialog class="display-menu-dialog order-dialog" id="orde
   <button id="orderDialogClose" class="icon-button" type="button" aria-label="注文画面を閉じる">${icon('close')}</button>
  </div>
  <form id="orderForm" class="order-form">
-  <div class="order-instrument"><strong>共通デモ指数</strong><span>成行</span></div>
+  <div class="order-instrument"><strong>共通デモ指数</strong><span id="orderCloseType" hidden>成行</span></div>
+  <label class="order-quantity" id="orderTypeRow">注文方法<select id="orderType"><option value="market">成行</option><option value="limit">指値</option><option value="stop">逆指値</option></select></label>
   <dl class="order-facts">
    <div><dt>売買</dt><dd><b class="order-direction" id="orderDirection">—</b></dd></div>
    <div><dt id="orderRateType">参考レート</dt><dd class="mono" id="orderRate">—</dd></div>
    <div id="orderProfitRow" hidden><dt>決済損益の目安</dt><dd class="mono" id="orderProfit">—</dd></div>
   </dl>
+  <label class="order-quantity" id="orderTargetRow" hidden>指定レート<input id="orderTarget" type="number" inputmode="decimal" min="0.001" step="0.001" aria-describedby="orderTargetHelp" disabled><small id="orderTargetHelp"></small></label>
   <label class="order-quantity">数量（デモ単位）<input id="orderQuantity" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1" required></label>
-  <p class="order-note">注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。</p>
+  <p class="order-note" id="orderNote">注文を確定した時点の仮想レートで約定し、このブラウザーに記録します。</p>
   <p class="order-error" id="orderNoQuote" role="status" hidden>価格の同期を待っています。</p>
   <p class="order-error" id="orderError" role="alert" hidden></p>
   <button class="order-side-button order-submit" id="orderSubmit" type="submit">注文を確定</button>
@@ -42,6 +44,11 @@ const orderDialog=()=>`<dialog class="display-menu-dialog order-dialog" id="orde
 const orderHistory=()=>`<section class="panel orders-panel" id="trades">
  <div class="panel-heading"><h2>デモ取引</h2><span class="caption">このブラウザーに保存</span></div>
  <p id="ordersStatus" class="order-error" role="status" hidden></p>
+ <section class="orders-section" aria-labelledby="orderPendingTitle">
+  <div class="order-section-heading"><h3 id="orderPendingTitle">未約定注文</h3><span>取消まで有効</span></div>
+  <p class="empty-state" id="orderEmptyPending">未約定注文はありません。</p>
+  <ul class="order-list" id="orderPending"></ul>
+ </section>
  <section class="orders-section" aria-labelledby="orderPositionsTitle">
   <h3 id="orderPositionsTitle">保有建玉</h3>
   <p class="empty-state" id="orderEmptyPositions">保有建玉はありません。</p>
