@@ -331,7 +331,6 @@ body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:va
   white-space:nowrap;
  }
  body[data-page=viewer] .mobile-instrument strong {font-size:13px;font-weight:650}
- body[data-page=viewer] .mobile-instrument span {font-size:10px;color:var(--muted)}
  body[data-page=viewer] .mobile-change {padding-inline:3px 10px}
  body[data-page=viewer] .signal-bar .quote-strip {grid-column:1/-1;align-self:stretch}
  body[data-page=viewer] .signal-bar .quote-rate {font-size:19px}
@@ -360,7 +359,7 @@ body[data-page=viewer] .footer{font-size:11px;gap:14px;padding-top:12px;color:va
  body[data-page=viewer] .signal-dialog #signalCard .signal-main{display:grid}body[data-page=viewer] .signal-dialog #signalCard .panel-heading{display:flex}body[data-page=viewer] .signal-dialog .signal-detail-content{display:contents}
  body[data-page=viewer][data-chart-focus=true]{overflow:hidden}body[data-page=viewer][data-chart-focus=true] #chartArea{position:fixed;inset:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);height:auto;min-height:0;z-index:100;border:0;border-radius:0;background:#fff;box-shadow:0 0 0 100vmax #fff}body[data-page=viewer][data-chart-focus=true] .chart-body{flex:1;min-height:0}
 }
-@media(max-width:350px){body[data-page=viewer] .mobile-instrument span{font-size:9px}body[data-page=viewer] .mobile-instrument strong{font-size:12px}body[data-page=viewer] .signal-bar-label{display:none}body[data-page=viewer] .chart-indicator-trigger small{max-width:112px}}
+@media(max-width:350px){body[data-page=viewer] .mobile-instrument strong{font-size:12px}body[data-page=viewer] .signal-bar-label{display:none}body[data-page=viewer] .chart-indicator-trigger small{max-width:112px}}
 @media(orientation:landscape) and (max-height:500px) and (max-width:1000px){body[data-page=viewer] .signal-bar{display:none}body[data-page=viewer] .landscape-ticker{display:flex;align-items:center;gap:10px;margin-left:auto;min-width:0}body[data-page=viewer] .landscape-price-label,body[data-page=viewer] .header-right .connection{display:none}body[data-page=viewer][data-view=chart] .container{height:calc(100dvh - var(--header-h) - var(--dock-h));min-height:250px}body[data-page=viewer] .terminal-layout{grid-template-rows:minmax(0,1fr) 44px}body[data-page=viewer] .data-workspace [role=tabpanel]{min-height:220px}}
 @media(prefers-reduced-motion:reduce){body[data-page=viewer] .quote-flash{animation:none!important}}
 
@@ -395,6 +394,7 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
 
 @media(max-width:767px),(orientation:landscape) and (max-height:500px) and (max-width:1000px){
  body[data-page=viewer] .chart-order-bar {justify-content:stretch}
+ body[data-page=viewer] .chart-order-bar>span {display:none}
  body[data-page=viewer] .chart-order-bar .order-side-button {flex:1;min-width:0}
  body[data-page=viewer] .order-dialog {width:100%;max-width:100%}
 }
@@ -408,7 +408,6 @@ body[data-page=viewer]:has(dialog[open]){overflow:hidden}
   padding:0 4px;
   border-inline-start:1px solid var(--border);
  }
- body[data-page=viewer] .chart-order-bar>span {display:none}
  body[data-page=viewer] .chart-order-bar .order-side-button {border-radius:0}
 }
 @media(max-width:767px) and (max-height:620px){
