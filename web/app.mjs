@@ -1,8 +1,9 @@
 import {createTerminalChart} from './terminal-chart.mjs';
-import {validAutomation,newerFrame} from './timeline.mjs';
+import {validAutomation,newerFrame,createMarketBarReader} from './timeline.mjs';
+import {CHART_PERIODS,marketClock} from './market-bars.mjs';
 import {createSiteClient} from './site-client.mjs';
 import {createEngine,initialCheckpoint,DEFAULT_SIGNAL,validateScene} from './engine.mjs';
-import {renderScene,renderEvents,chartHitIndex} from './render.mjs';
+import {renderScene,renderEvents,chartHitIndex,barTimestamp} from './render.mjs';
 import {createSceneRepository} from './repository.mjs';
 import {readDisplayPreferences,saveDisplayPreferences,createPriceStreak} from './presentation.mjs';
 import {eventsCsv,sceneJson,saveDownload} from './exports.mjs';
@@ -13,6 +14,9 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
  let published={id:1,version:0,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:null},engine=createEngine(published.checkpoint),signal={...published.signal},announcement='',dirty=false,conflict=false,saving=false,playing=false,live=false,loadFailed=false,polling=false,lastPoll=0,pendingRemote=null,autoApply=false,applyTimer=null,lastReadAt=0,eventRows=[],hover=null,selectedTime=null,ma=true,bands=false,maxBars=null,unsubscribe=()=>{},authUnsubscribe=()=>{},playTimer=null,autoTimer=null,pollTimer=null,toastTimer=null;
  const preferences=adminPage?{colors:'jp',maxBars:null,changeBase:'previous'}:readDisplayPreferences(window);maxBars=preferences.maxBars;ma=preferences.ma!==false;bands=preferences.bands===true;let study=preferences.study||'none',changeBase=preferences.changeBase,flashTimer=null,viewFrame=null;const priceStreak=createPriceStreak();
  let automationDraft=null,chartFocused=false,ownerEmailPending='',ownerCooldownUntil=0,ownerSending=false,ownerAuthMethod='code';
+ const readMarketBars = createMarketBarReader();
+ let marketView = null;
+ const displayRows = () => marketView?.rows ?? (adminPage ? engine.snapshot() : published.checkpoint).rows;
  const savePreferences=()=>saveDisplayPreferences(window,{...preferences,maxBars,changeBase,ma,bands,study});
  if(!adminPage){document.documentElement.dataset.colors=preferences.colors;if($('colorConvention'))$('colorConvention').value=preferences.colors;if($('changeBase'))$('changeBase').value=changeBase;if($('showMa'))$('showMa').checked=ma;if($('showBands'))$('showBands').checked=bands;if($('chartStudy'))$('chartStudy').value=study;}
  const setText=(id,value)=>{const element=$(id);if(element&&element.textContent!==String(value))element.textContent=value};
@@ -46,7 +50,25 @@ export async function mountApp({document=globalThis.document,window=globalThis.w
   }
  }
  function paint(){gates();renderSyncInfo();if($('exportScene'))$('exportScene').disabled=!ready||published.version<1;if($('exportEvents'))$('exportEvents').disabled=!ready||!eventRows.length;const record=adminPage?{...published,...draft()}:published;
-  if(ready){if(selectedTime!==null){const width=$('chart')?.getBoundingClientRect().width||960,visible=chartController?record.checkpoint.rows:record.checkpoint.rows.slice(-(maxBars??(width<600?36:72))),index=visible.findIndex(row=>row.time===selectedTime);hover=index>=0?index:null;if(index<0)selectedTime=null;}renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime});chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime});}else if(!adminPage){for(const id of ['quote','mobileQuote','mobilePriceChange','landscapeQuote','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通のシミュレーション価格を取得しています');}
+  if(ready){
+   const {checkpoint} = record;
+   const periodPicker = $('chartPeriod');
+   if (periodPicker) {
+    const clock = marketClock(checkpoint);
+    const period = preferences.period;
+    const lastStep = checkpoint.rows.at(-1).time;
+    const hasPeriods = !!clock && lastStep >= clock.since;
+    periodPicker.hidden = !hasPeriods;
+    if (periodPicker.value !== String(period)) periodPicker.value = String(period);
+    const rows = hasPeriods ? readMarketBars(checkpoint, period) : [];
+    const running = validAutomation(checkpoint.automation);
+    const remainder = ((clock?.epoch ?? 0) + lastStep) % period;
+    marketView = rows.length ? {rows, period, running, remaining:remainder ? period - remainder : 0} : null;
+   }
+   if(selectedTime!==null){const width=$('chart')?.getBoundingClientRect().width||960,rows=displayRows(),visible=chartController?rows:rows.slice(-(maxBars??(width<600?36:72))),index=visible.findIndex(row=>row.time===selectedTime);hover=index>=0?index:null;if(index<0)selectedTime=null;}
+   renderScene(document,record,{ma,bands,study,hover,maxBars,changeBase,externalChart:!!chartController,selectionTime:selectedTime,marketView});
+   chartController?.update({record,ma,bands,study,colors:preferences.colors,maxBars,selectionTime:selectedTime,marketView});
+  }else if(!adminPage){marketView=null;$('chartPeriod').hidden=true;for(const id of ['quote','mobileQuote','mobilePriceChange','landscapeQuote','priceChange','signalLevel','signalFraction','mobileSignalLevel'])setText(id,'—');setText('mobileSignalDirection','読み込み中');setText('landscapeSignal','読み込み中');setText('signalDirection','読み込み中');setText('signalCode','—');$('chart').replaceChildren();setText('mobileScenario','共通のシミュレーション価格を取得しています');}
 if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(flash&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.clearTimeout(flashTimer);for(const id of ['quote','mobileQuote','chartArea']){const el=$(id);if(!el)continue;el.classList.remove('quote-flash');el.dataset.flash=flash;void el.offsetWidth;el.classList.add('quote-flash')}flashTimer=window.setTimeout(()=>{for(const id of ['quote','mobileQuote','chartArea'])$(id)?.classList.remove('quote-flash')},600)}}renderBarPresets();}
  function renderBarPresets(range=chartController?.state?.().range){const preset=maxBars??Number($('chart')?.dataset.count),activeBars=range&&Math.abs(range.to-range.from-preset-1)>.5?null:preset;document.querySelectorAll('[data-viewbars]').forEach(e=>{const selected=Number(e.dataset.viewbars)===activeBars;e.classList.toggle('active',selected);e.setAttribute('aria-pressed',String(selected))});}
  function fillControls(){if(!adminPage)return;const config=engine.snapshot().config;const auto=automationDraft||config;if(!automationDraft)setText('automationSettingsHint','自動更新中に調整できます。反映前の足は変更しません。');if($('autoSpeed'))$('autoSpeed').value=String(auto.speed);if($('autoVolatility'))$('autoVolatility').value=String(auto.volatility);setText('autoVolatilityOutput',auto.volatility+' / 10');document.querySelectorAll('[data-dir]').forEach(e=>e.setAttribute('aria-pressed',String(Number(e.dataset.dir)===config.direction)));$('volatility').value=String(config.volatility);setText('volatilityOutput',config.volatility+' / 10');$('speed').value=String(config.speed);$('editSignalDirection').value=String(signal.direction);$('editSignalLevel').value=signal.level;$('editSignalNote').value=signal.note;$('announcementInput').value=announcement;}
@@ -105,18 +127,30 @@ if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(
  document.querySelectorAll('[data-admin-pane]').forEach(link=>link.onclick=event=>{if(!window.matchMedia('(max-width: 767px)').matches)return;event.preventDefault();const pane=link.dataset.adminPane;setAdminPane(pane,true);window.history.replaceState(null,'',pane==='preview'?'#adminPreview':'#adminControls')});if(adminPage)setAdminPane(window.location.hash==='#adminPreview'?'preview':'controls');
  if($('showMa'))$('showMa').onchange=event=>{ma=event.target.checked;if(!adminPage)savePreferences();paint()};if($('showBands'))$('showBands').onchange=event=>{bands=event.target.checked;if(!adminPage)savePreferences();paint()};
  if($('chartStudy'))$('chartStudy').onchange=event=>{study=['rsi','macd'].includes(event.target.value)?event.target.value:'none';savePreferences();paint()};
- const inspectChart=event=>{const chart=$('chart'),rect=chart.getBoundingClientRect();if(!rect.width)return;const count=Number(chart.dataset.count)||72,width=Number(chart.dataset.width)||rect.width;hover=chartHitIndex((event.clientX-rect.left)*width/rect.width,width,count);selectedTime=(adminPage?engine.snapshot():published.checkpoint).rows.slice(-count)[hover]?.time??null;paint()};
+ const inspectChart=event=>{const chart=$('chart'),rect=chart.getBoundingClientRect();if(!rect.width)return;const count=Number(chart.dataset.count)||72,width=Number(chart.dataset.width)||rect.width;hover=chartHitIndex((event.clientX-rect.left)*width/rect.width,width,count);selectedTime=displayRows().slice(-count)[hover]?.time??null;paint()};
  if(!chartController){let pointerHeld=false;const startInspect=event=>{pointerHeld=true;inspectChart(event);if(event.pointerType==='touch')$('chart')?.setPointerCapture?.(event.pointerId)};$('chart')?.addEventListener('pointerdown',startInspect);$('chart')?.addEventListener('pointerup',()=>pointerHeld=false);$('chart')?.addEventListener('pointercancel',()=>pointerHeld=false);$('chart')?.addEventListener('pointermove',event=>{if(event.pointerType!=='touch'||pointerHeld)inspectChart(event)});$('chart')?.addEventListener('pointerleave',event=>{if(event.pointerType!=='touch'){hover=null;selectedTime=null;paint()}});}
- const inspectionTarget=chartController?$('tradeChart'):$('chart');inspectionTarget?.addEventListener('keydown',event=>{const count=chartController?published.checkpoint.rows.length:Number($('chart').dataset.count)||72;if(event.key==='Escape'){hover=null;selectedTime=null;chartController?.follow();paint();return}if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();hover=event.key==='Home'?0:event.key==='End'?count-1:Math.max(0,Math.min(count-1,(hover??count-1)+(event.key==='ArrowLeft'?-1:1)));selectedTime=(adminPage?engine.snapshot():published.checkpoint).rows.slice(-count)[hover]?.time??null;paint()});
+ const inspectionTarget=chartController?$('tradeChart'):$('chart');inspectionTarget?.addEventListener('keydown',event=>{const rows=displayRows(),count=chartController?rows.length:Number($('chart').dataset.count)||72;if(event.key==='Escape'){hover=null;selectedTime=null;chartController?.follow();paint();return}if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();hover=event.key==='Home'?0:event.key==='End'?count-1:Math.max(0,Math.min(count-1,(hover??count-1)+(event.key==='ArrowLeft'?-1:1)));selectedTime=rows.slice(-count)[hover]?.time??null;paint()});
  if($('followLatest'))$('followLatest').onclick=()=>{hover=null;selectedTime=null;chartController?.follow();paint()};
- function moveInspection(delta){if(!ready)return;const chart=$('chart'),count=chartController?published.checkpoint.rows.length:Number(chart.dataset.count)||72,rows=(adminPage?engine.snapshot():published.checkpoint).rows.slice(-count);const index=selectedTime===null?rows.length-1:rows.findIndex(row=>row.time===selectedTime);hover=Math.max(0,Math.min(rows.length-1,(index<0?rows.length-1:index)+delta));selectedTime=rows[hover]?.time??null;paint()}
+ function moveInspection(delta){if(!ready)return;const chart=$('chart'),rows=displayRows().slice(chartController?0:-(Number(chart.dataset.count)||72));const index=selectedTime===null?rows.length-1:rows.findIndex(row=>row.time===selectedTime);hover=Math.max(0,Math.min(rows.length-1,(index<0?rows.length-1:index)+delta));selectedTime=rows[hover]?.time??null;paint()}
  if($('previousCandle'))$('previousCandle').onclick=()=>moveInspection(-1);
  if($('nextCandle'))$('nextCandle').onclick=()=>moveInspection(1);
  function setChartFocus(value){if(adminPage)return;chartFocused=value;document.body.dataset.chartFocus=String(value);const button=$('chartFocus');if(button){button.setAttribute('aria-pressed',String(value));button.querySelector('span').textContent=value?'閉じる':'拡大';button.setAttribute('aria-label',value?'チャートの拡大を閉じる':'チャートを拡大')}window.requestAnimationFrame(()=>{if(!destroyed)paint()})}
  if($('chartFocus'))$('chartFocus').onclick=()=>setChartFocus(!chartFocused);
  const escapeChart=event=>{if(event.key==='Escape'&&chartFocused){setChartFocus(false);$('chartFocus')?.focus()}};document.addEventListener('keydown',escapeChart);
  if($('historyColumns'))$('historyColumns').onclick=()=>{const button=$('historyColumns'),full=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(full));button.textContent=full?'簡易表示に戻す':'4本値を表示';document.body.dataset.historyFull=String(full)};
- if($('export'))$('export').onclick=()=>{const record=adminPage?draft():published;const csv='step,open,high,low,close\n'+record.checkpoint.rows.map(row=>[row.time,row.open,row.high,row.low,row.close].join(',')).join('\n');const url=window.URL.createObjectURL(new window.Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='signal-desk-demo.csv';link.click();window.setTimeout(()=>window.URL.revokeObjectURL(url),1000);toast('デモ指数のCSVを保存しました')};
+ if($('export'))$('export').onclick=()=>{
+  const record=adminPage?draft():published,rows=marketView?.rows??record.checkpoint.rows;
+  const heading=marketView?'bar_start_utc,open,high,low,close,status':'step,open,high,low,close';
+  const values=rows.map((row,index)=>{
+   const quote=[row.open,row.high,row.low,row.close];
+   if(!marketView)return [row.time,...quote].join(',');
+   const status=index!==rows.length-1||!marketView.remaining?'closed':marketView.running?'forming':'stopped';
+   return [barTimestamp(record.checkpoint,row.time,marketView),...quote,status].join(',');
+  });
+  const filename=marketView?'signal-desk-demo-'+marketView.period+'s.csv':'signal-desk-demo.csv';
+  saveDownload(window,document,[heading,...values].join('\n'),filename,'text/csv;charset=utf-8');
+  toast('デモ指数のCSVを保存しました');
+ };
  if($('exportScene'))$('exportScene').onclick=()=>{if(!ready||published.version<1)return;saveDownload(window,document,sceneJson(published),'demo-scene-v'+published.version+'.json','application/json');toast('公開済みの設定を書き出しました')};
  if($('exportEvents'))$('exportEvents').onclick=()=>{if(!ready||!eventRows.length)return;saveDownload(window,document,eventsCsv(eventRows),'demo-history-v'+published.version+'.csv','text/csv;charset=utf-8');toast('取得済みの変更履歴を書き出しました（最大30件）')};
  const dataTabs=[...document.querySelectorAll('[data-data-tab]')],dockTabs=[...document.querySelectorAll('[data-dock-view]')];
@@ -131,6 +165,16 @@ if(!adminPage&&ready){const flash=priceStreak(record.checkpoint.rows.at(-1));if(
  document.querySelectorAll('[data-open-tab]').forEach(link=>link.onclick=event=>{event.preventDefault();openView(link.dataset.openTab)});document.querySelectorAll('[data-view-chart]').forEach(link=>link.onclick=event=>{event.preventDefault();openView('chart')});
  if($('colorConvention'))$('colorConvention').onchange=event=>{preferences.colors=event.target.value==='intl'?'intl':'jp';document.documentElement.dataset.colors=preferences.colors;savePreferences();paint()};
  if($('changeBase'))$('changeBase').onchange=event=>{changeBase=event.target.value==='period'?'period':'previous';savePreferences();paint()};
+ if ($('chartPeriod')) $('chartPeriod').onchange = event => {
+  const period = Number(event.target.value);
+  if (!CHART_PERIODS.includes(period)) return;
+  preferences.period = period;
+  savePreferences();
+  hover = null;
+  selectedTime = null;
+  chartController?.follow();
+  paint();
+ };
  const closeMenu=event=>{const menu=$('displayMenu');if(menu&&event.target===menu){const r=menu.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)menu.close()}};document.addEventListener('click',closeMenu);
  if($('displayMenuOpen'))$('displayMenuOpen').onclick=()=>$('displayMenu').showModal();
  if($('displayMenuClose'))$('displayMenuClose').onclick=()=>$('displayMenu').close();

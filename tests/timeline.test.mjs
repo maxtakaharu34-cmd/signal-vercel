@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {initialCheckpoint,DEFAULT_SIGNAL,validateScene} from '../web/engine.mjs';
-import {startAutomation,stopAutomation,projectScene,newerFrame,signalDiagnostics} from '../web/timeline.mjs';
+import {startAutomation,stopAutomation,projectScene,newerFrame,signalDiagnostics,signalHistory,signalTimestamp,createMarketBarReader,tuneAutomation} from '../web/timeline.mjs';
+import {SIGNAL_PERIOD} from '../web/market-bars.mjs';
 const NOW=Date.parse('2026-11-06T03:00:00Z');
 const scene=()=>({id:1,version:21,checkpoint:initialCheckpoint(),signal:{...DEFAULT_SIGNAL},announcement:'',updated_at:new Date(NOW).toISOString()});
 test('all viewers derive the same common frame from server time without mutating the saved anchor',()=>{
@@ -9,7 +10,7 @@ test('all viewers derive the same common frame from server time without mutating
 });
 test('an upward instruction builds strength gradually without a fixed six-stage ladder or a price jump',()=>{
  const running=startAutomation(scene(),1,NOW),initial=running.checkpoint.rows.at(-1).close;assert.equal(running.checkpoint.rows.at(-1).close,initial);assert.equal(running.signal.level,'極寒');
- const samples=Array.from({length:21},(_,i)=>projectScene(running,NOW+i*3000).signal);assert.ok(new Set(samples.map(s=>s.level)).size>=4);assert.equal(samples.at(-1).direction,1);assert.notEqual(samples.at(-1).level,'極寒');assert.ok(samples.slice(0,3).every(s=>s.direction>=0));
+ const samples=Array.from({length:5},(_,i)=>projectScene(running,NOW+i*SIGNAL_PERIOD*1000).signal);assert.ok(new Set(samples.map(s=>s.level)).size>=3);assert.equal(samples.at(-1).direction,1);assert.notEqual(samples.at(-1).level,'極寒');assert.ok(samples.slice(0,3).every(s=>s.direction>=0));
  const first=projectScene(running,NOW+1000).checkpoint.rows.at(-1);assert.equal(first.open,initial);assert.ok(Math.abs(first.close/initial-1)<.002);
 });
 test('direction changes preserve existing candles and reverse momentum gradually',()=>{
@@ -37,9 +38,46 @@ test('unchanged price evidence is independent of administrator direction, volati
  const running=startAutomation(scene(),0,NOW);
  for(const price of [()=>100,t=>100*Math.exp(.0003*t)]){const reference=signalDiagnostics(running.checkpoint,300,price);for(const direction of [-1,0,1]){const checkpoint=structuredClone(running.checkpoint);checkpoint.config.direction=direction;checkpoint.config.volatility=10;checkpoint.seed=123;assert.deepEqual(signalDiagnostics(checkpoint,300,price),reference)}assert.equal(reference.direction,price(0)===price(300)?0:1)}
 });
-test('the shared three-step hold prevents second-by-second label flicker',()=>{
+test('signal fields hold until the next closed 15-second bar even when quotes move',()=>{
  const running=startAutomation(scene(),0,NOW);
- for(let t=Math.ceil((running.checkpoint.automation.originTime+120)/3)*3-running.checkpoint.automation.originTime;t<300;t+=3){const a=projectScene(running,NOW+t*1000).signal;assert.deepEqual(projectScene(running,NOW+(t+1)*1000).signal,a);assert.deepEqual(projectScene(running,NOW+(t+2)*1000).signal,a)}
+ for(let t=120;t<300;t+=SIGNAL_PERIOD){
+  const first=projectScene(running,NOW+t*1000);
+  const next=projectScene(running,NOW+(t+SIGNAL_PERIOD-1)*1000);
+  assert.notEqual(next.checkpoint.rows.at(-1).close,first.checkpoint.rows.at(-1).close);
+  assert.deepEqual(next.signal,first.signal);
+  const last=signalHistory(next).at(-1);
+  assert.equal(Date.parse(signalTimestamp(next.checkpoint,last.time)),NOW+t*1000);
+ }
+});
+
+test('the forming bar updates in place, closes on its clock boundary, and agrees with its source candles',()=>{
+ const running=startAutomation(scene(),0,NOW),read=createMarketBarReader();
+ const barsAt=(seconds,period)=>read(projectScene(running,NOW+seconds*1000).checkpoint,period);
+ const first=barsAt(1,15).at(-1),forming=barsAt(14,15).at(-1),closed=barsAt(15,15).at(-1);
+ assert.equal(first.time,forming.time);
+ assert.equal(first.open,closed.open);
+ assert.notEqual(first.close,forming.close);
+ assert.deepEqual(barsAt(16,15).at(-2),closed);
+ const source=barsAt(15,1);
+ assert.deepEqual(closed,{time:Math.floor(source[0].time/15),open:source[0].open,high:Math.max(...source.map(row=>row.high)),low:Math.min(...source.map(row=>row.low)),close:source.at(-1).close});
+ const minute=barsAt(60,60).at(-1),quarters=barsAt(60,15);
+ assert.equal(minute.high,Math.max(...quarters.map(row=>row.high)));
+ assert.equal(minute.low,Math.min(...quarters.map(row=>row.low)));
+ assert.equal(minute.close,quarters.at(-1).close);
+});
+
+test('timeframe history survives tuning, stopping, and reopening in a fresh viewer',()=>{
+ const running=startAutomation(scene(),0,NOW),now=NOW+1837000;
+ const frame=projectScene(running,now),read=createMarketBarReader();
+ const previous=read(frame.checkpoint,15);
+ assert.equal(previous.length,120);
+ const tuned=tuneAutomation(running,{speed:5,volatility:4},now);
+ assert.ok(validateScene(tuned));
+ assert.deepEqual(createMarketBarReader()(tuned.checkpoint,15),previous);
+ const after=projectScene(tuned,now+1000),stopped=stopAutomation(tuned,now+1000);
+ assert.ok(validateScene(stopped));
+ assert.deepEqual(createMarketBarReader()(stopped.checkpoint,15),read(after.checkpoint,15));
+ assert.equal(createMarketBarReader()(after.checkpoint,1).at(-1).time-createMarketBarReader()(frame.checkpoint,1).at(-1).time,5);
 });
 test('a direction command preserves the current signal before gradually changing it',()=>{
  const running=startAutomation(scene(),1,NOW),at=NOW+733000,before=projectScene(running,at),turn=startAutomation(running,-1,at);

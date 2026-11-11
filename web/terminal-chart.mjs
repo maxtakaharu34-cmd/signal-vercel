@@ -4,6 +4,7 @@ import {studySeries} from './studies.mjs';
 import {simulationTimestamp} from './timeline.mjs';
 
 const timeFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const minuteFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
 export function candleTimeLabel(checkpoint,time){const stamp=simulationTimestamp(checkpoint,time);return stamp?timeFormat.format(new Date(stamp)):'T'+time}
 
 // Absolute candle IDs survive a rolling 120-bar buffer and scenario re-anchors.
@@ -22,8 +23,11 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
  // do not claim to exercise Canvas; adapter tests inject a chart API separately.
  if(library===LightweightCharts&&!window.CanvasRenderingContext2D)return null;
  const {createChart,CandlestickSeries,LineSeries,HistogramSeries,ColorType,CrosshairMode,LineStyle}=library;
- let record=null,rows=[],range=null,following=true,selected=null,previousCount=null,previousStudy='none',previousColors=null,lastData=null,destroyed=false,writing=false;
- const format=time=>record?candleTimeLabel(record.checkpoint,Number(time)):'T'+time;
+ let record=null,rows=[],range=null,following=true,selected=null,previousCount=null,previousStudy='none',previousColors=null,lastData=null,destroyed=false,writing=false,period=null;
+ const format=time=>{
+  if(period){const formatter=period===60?minuteFormat:timeFormat;return formatter.format(new Date(Number(time)*period*1000));}
+  return record?candleTimeLabel(record.checkpoint,Number(time)):'T'+time;
+ };
  const chart=createChart(element,{
   autoSize:true,
   layout:{
@@ -73,10 +77,12 @@ export function createTerminalChart({element,window,onInspect=()=>{},onViewport=
   if(time===selected)return;selected=time;onInspect(time);
  };
  chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);chart.subscribeCrosshairMove(onCrosshair);
- function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null}){
+ function update({record:next,ma=true,bands=false,study='none',colors='jp',maxBars=null,selectionTime=null,marketView=null}){
   if(destroyed)return;
-  record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=next.checkpoint.rows;
-  const reset=previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
+  record=next;const count=maxBars??(element.getBoundingClientRect().width<600?36:72),nextRows=marketView?.rows??next.checkpoint.rows;
+  const nextPeriod=marketView?.period??null;
+  const reset=period!==nextPeriod||previousCount!==count||rows.length&&nextRows.at(-1).time<rows.at(-1).time;
+  period=nextPeriod;
   const savedRange=resolveChartWindow(nextRows,{range,following,count,reset});
   const dataChanged=JSON.stringify(nextRows)!==lastData,studyChanged=study!==previousStudy,colorChanged=colors!==previousColors;
   writing=true;

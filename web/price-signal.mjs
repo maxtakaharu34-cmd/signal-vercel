@@ -6,7 +6,7 @@ const HORIZONS=[8,24,48],WEIGHTS=[.3,.4,.3],SMOOTH=[.4,.3,.2,.1];
 const ENTER=.24,RELEASE=.12,LEVEL_THRESHOLDS=[0,.24,.39,.54,.69,.84];
 const clamp=(value,low=0,high=1)=>Math.max(low,Math.min(high,value));
 
-export function createPriceSignal(closeAt){
+export function createPriceSignal(closeAt, offset=0){
  const prices=new Map(),features=new Map(),scores=new Map();
  function close(time){if(!prices.has(time)){const value=closeAt(time);prices.set(time,Number.isFinite(value)&&value>0?value:null)}return prices.get(time)}
  function feature(time){
@@ -30,7 +30,7 @@ export function createPriceSignal(closeAt){
  function score(time){if(!scores.has(time))scores.set(time,feature(time).available?SMOOTH.reduce((sum,weight,i)=>sum+weight*feature(time-i*SIGNAL_STEP).raw,0):0);return scores.get(time)}
  function confirms(time,direction,threshold){return direction*score(time)>=threshold&&direction*score(time-SIGNAL_STEP)>=threshold}
  function at(time){
-  const sample=Math.floor(time/SIGNAL_STEP)*SIGNAL_STEP,current=score(sample),sign=Math.sign(current),evidence=feature(sample);
+  const sample=Math.floor((time+offset)/SIGNAL_STEP)*SIGNAL_STEP-offset,current=score(sample),sign=Math.sign(current),evidence=feature(sample);
   // Separate entry and release thresholds prevent one marginal reading from
   // flipping direction. Confirmation expires instead of holding indefinitely.
   const direction=Math.abs(current)>=RELEASE&&Array.from({length:8},(_,i)=>sample-i*SIGNAL_STEP).some(t=>confirms(t,sign,ENTER))?sign:0;

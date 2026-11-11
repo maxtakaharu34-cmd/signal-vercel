@@ -10,7 +10,7 @@ export function createEngine(checkpoint=initialCheckpoint()){
  return {
  snapshot:()=>({...structuredClone(state),rngState:rng.state()}),
  configure(patch){if(state.automation)throw Error('自動シミュレーションを停止してから編集してください。');const next={...state,config:{...state.config,...patch}};if(!validateCheckpoint(next))throw Error('シナリオ設定の範囲が正しくありません。');state=next},
- step(){if(state.automation)throw Error('自動生成中は手動で足を追加できません。');const previous=state.rows.at(-1);state.rows.push(candle(previous.close,state.config,rng,previous.time+1));if(state.rows.length>120)state.rows.shift();state.total++;state.rngState=rng.state()},
+ step(){if(state.automation)throw Error('自動生成中は手動で足を追加できません。');delete state.market;const previous=state.rows.at(-1);state.rows.push(candle(previous.close,state.config,rng,previous.time+1));if(state.rows.length>120)state.rows.shift();state.total++;state.rngState=rng.state()},
  reset(seed=state.seed){state=initialCheckpoint(seed);rng=generator(state.rngState)}
  }
 }

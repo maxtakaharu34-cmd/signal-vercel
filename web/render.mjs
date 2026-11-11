@@ -1,4 +1,5 @@
-import {validAutomation,signalDiagnostics,signalHistory,simulationTimestamp} from './timeline.mjs';
+import {validAutomation,signalDiagnostics,signalHistory,simulationTimestamp,signalTimestamp} from './timeline.mjs';
+import {SIGNAL_PERIOD} from './market-bars.mjs';
 import {marketContext} from './market-context.mjs';
 import {quoteChange} from './presentation.mjs';
 import {metrics} from './lib/analytics.mjs';
@@ -14,6 +15,9 @@ function renderViewerQuote(element, price) {
 }
 const time=value=>value?new Date(value).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):'未公開';
 const shortTime=value=>new Date(value).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hourCycle:'h23'});
+export function barTimestamp(checkpoint, time, marketView) {
+ return marketView ? new Date(time * marketView.period * 1000).toISOString() : simulationTimestamp(checkpoint, time);
+}
 export function chartGeometry(width,height,count){const right=width-80,top=24,bottom=height-48,step=(right-30)/count;return {right,top,bottom,plotHeight:bottom-top,step,candleWidth:Math.min(6.4,step*.7)}}
 export function chartHitIndex(position,width,count){const {step}=chartGeometry(width,380,count);return Math.max(0,Math.min(count-1,Math.round((position-22)/step)))}
 export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=380,maxBars=null,timeLabel=null}={}){
@@ -35,30 +39,36 @@ export function chartSvg(rows,{ma=true,bands=false,hover=null,width=960,height=3
 function contextDirection(value){return value===null?'データ不足':value>0?'上向き':value<0?'下向き':'中立'}
 function tone(value){return value>0?'up':value<0?'down':'neutral'}
 const analysisRecords=new WeakMap();
-function renderAnalysis(document,record){
- if(analysisRecords.get(document)===record)return;
- analysisRecords.set(document,record);
+function renderAnalysis(document,record,rows){
+ const previous=analysisRecords.get(document);
+ if(previous?.record===record && previous.rows===rows)return;
+ analysisRecords.set(document,{record,rows});
  const $=id=>document.getElementById(id),set=(id,value)=>{if($(id))$(id).textContent=value};
- const context=marketContext(record.checkpoint.rows);
+ const context=marketContext(rows);
  if($('contextHorizons'))$('contextHorizons').innerHTML=context.horizons.map(h=>`<div data-tone="${tone(h.direction)}"><span>${h.label} <small>${h.period}本</small></span><strong>${contextDirection(h.direction)}</strong><b class="mono">${h.change===null?'—':(h.change>=0?'+':'')+number(h.change,3)+'%'}</b></div>`).join('');
  set('contextAgreement',context.agreement);set('contextVolatility',context.volatility);set('contextVolatilityRatio',(context.volatilityRatio===null?'比較不可':number(context.volatilityRatio,2)+'倍')+' · 直近8本 / 前24本');set('contextShape',context.shape);set('contextAtr','ATR 14 / 終値 '+number(context.atrPercent,3)+'%');
  if($('contextReferences'))$('contextReferences').innerHTML=context.references.map(r=>`<div><span>${r.label}</span><strong data-tone="${tone(r.direction)}">${contextDirection(r.direction)}</strong><small>${r.description}</small></div>`).join('');
- const history=signalHistory(record),latest=history.at(-1),signalTime=h=>{const stamp=simulationTimestamp(record.checkpoint,h.time);return stamp?shortTime(stamp)+' JST':'T'+h.time};set('signalSample',latest?signalTime(latest):record.updated_at?time(record.updated_at):'—');
+ const history=signalHistory(record),latest=history.at(-1),signalTime=h=>{const stamp=signalTimestamp(record.checkpoint,h.time);return stamp?shortTime(stamp)+' JST':'T'+h.time};set('signalSample',latest?signalTime(latest):record.updated_at?time(record.updated_at):'—');
  if($('signalTrail')){
   $('signalTrail').innerHTML=history.map(h=>`<span role="img" aria-label="${signalTime(h)} · ${contextDirection(h.direction)} ${h.level}" data-tone="${tone(h.direction)}" data-strength="${LEVELS.indexOf(h.level)+1}" title="${signalTime(h)} · T${h.time} ${contextDirection(h.direction)} ${h.level}"></span>`).join('');
   $('signalTrail').setAttribute('aria-label',history.length?history.map(h=>'T'+h.time+' '+contextDirection(h.direction)+' '+h.level).join('、'):'手動設定のため、自動判定の履歴はありません');
  }
- set('signalTrailCaption',history.length?'現在のシナリオ · '+history.length+'判定 / 3ステップごと':'手動設定 · 自動判定の履歴なし');
+ set('signalTrailCaption',history.length?SIGNAL_PERIOD+'秒足の確定時に判定 · 直近'+history.length+'件':'手動設定 · 自動判定の履歴なし');
  if($('signalBreakdown')){
-  if(latest){const d=signalDiagnostics(record.checkpoint,record.clock.step);$('signalBreakdown').innerHTML=[['短期の勢い · 8本',d.short,true],['中期の勢い · 24本',d.medium,true],['長期の勢い · 48本',d.long,true],['方向の一致度',d.agreement,false],['値動きの継続性',d.efficiency,false],['合成スコア',d.score,true]].map(([label,value,signed])=>`<div><span>${label}</span><b class="mono" data-tone="${signed?tone(value):'neutral'}">${signed&&value>=0?'+':''}${number(value,3)}</b></div>`).join('')}
+  if(latest){const d=signalDiagnostics(record.checkpoint,record.clock.step);$('signalBreakdown').innerHTML=[['短期の勢い · 8本（1秒足）',d.short,true],['中期の勢い · 24本（1秒足）',d.medium,true],['長期の勢い · 48本（1秒足）',d.long,true],['方向の一致度',d.agreement,false],['値動きの継続性',d.efficiency,false],['合成スコア',d.score,true]].map(([label,value,signed])=>`<div><span>${label}</span><b class="mono" data-tone="${signed?tone(value):'neutral'}">${signed&&value>=0?'+':''}${number(value,3)}</b></div>`).join('')}
   else $('signalBreakdown').textContent='管理者による手動設定です。自動算出の内訳はありません。';
  }
 }
-export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null}={}){
+export function renderScene(document,record,{ma=true,bands=false,study='none',hover=null,maxBars=null,changeBase='previous',externalChart=false,selectionTime=null,marketView=null}={}){
  const $=id=>document.getElementById(id),set=(id,value)=>{const e=$(id);if(e)e.textContent=value};
- if($('chartArea'))$('chartArea').dataset.study=study;const chartElement=externalChart?$('tradeChart'):$('chart'),rect=chartElement?.getBoundingClientRect(),width=Math.max(240,Math.round(rect?.width||960)),height=Math.max(116,Math.round(rect?.height||380)),visibleCount=Math.min(maxBars??(width<600?36:72),record.checkpoint.rows.length);
- const {checkpoint,signal}=record,rows=checkpoint.rows,data=rows.slice(-visibleCount),last=rows.at(-1),change=quoteChange(rows,{base:changeBase,count:visibleCount}),calc=metrics(rows),level=LEVELS.indexOf(signal.level);
- renderAnalysis(document,record);
+ const {checkpoint,signal}=record,rows=marketView?.rows??checkpoint.rows;
+ if($('chartArea'))$('chartArea').dataset.study=study;const chartElement=externalChart?$('tradeChart'):$('chart'),rect=chartElement?.getBoundingClientRect(),width=Math.max(240,Math.round(rect?.width||960)),height=Math.max(116,Math.round(rect?.height||380)),visibleCount=Math.min(maxBars??(width<600?36:72),rows.length);
+ const data=rows.slice(-visibleCount),last=rows.at(-1),change=quoteChange(rows,{base:changeBase,count:visibleCount}),calc=metrics(rows),level=LEVELS.indexOf(signal.level);
+ const timestamp=time=>barTimestamp(checkpoint,time,marketView);
+ const periodLabel=marketView?.period===60?'1分足':marketView?marketView.period+'秒足':null;
+ set('analysisPeriod',periodLabel??'仮想OHLCから算出');
+ set('historyPeriod',(periodLabel?periodLabel+' · ':'')+'直近10本 · 新しい順');
+ renderAnalysis(document,record,rows);
  const running=validAutomation(checkpoint.automation);set('settingModel',running?(checkpoint.automation.priceModel===2?'不規則な値動き':'周期モデル（旧）'):'手動');set('settingRunState',running?'自動生成中':'手動／停止');set('generatedAt',running&&record.clock?.generatedAt?time(record.clock.generatedAt):'—');
  const card=$('signalCard');if(card){const tag=card.querySelector('.small-tag'),source=card.querySelector('.signal-source');if(tag)tag.textContent=running?'価格から判定':'管理者設定';if(source)source.textContent=running?signal.note.split('。')[0]+' · 仮想価格の変化から判定':'管理者が設定した仮想シナリオ'}
  const mobileSource=document.querySelector('.signal-bar-label');if(mobileSource)mobileSource.textContent=running?signal.note.split('。')[0]:'手動設定';
@@ -76,8 +86,13 @@ export function renderScene(document,record,{ma=true,bands=false,study='none',ho
  document.querySelectorAll('[data-level-bar]').forEach((e,i)=>e.classList.toggle('filled',i<=level));document.querySelectorAll('[data-level-label]').forEach(e=>{const current=Number(e.dataset.levelLabel)===level;e.classList.toggle('on',current);if(current)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current')});
  set('settingDirection',directionLabel(checkpoint.config.direction));set('settingSpeed',checkpoint.config.speed+'×');set('settingVolatility',checkpoint.config.volatility+' / 10');set('revision',record.version?'#'+String(record.version).padStart(4,'0'):'未同期');set('settingRevision',record.version?'#'+String(record.version).padStart(4,'0'):'未同期');set('updatedAt',record.updated_at?time(record.updated_at):'プレビュー');
  for(const [id,value] of Object.entries({metricRsi:calc.rsi,metricMacd:calc.macd,metricSma:calc.sma,metricEma:calc.ema,metricAtr:calc.atr,metricUpper:calc.band?.upper,metricLower:calc.band?.lower,metricSignal:calc.macdSignal}))set(id,number(value,id==='metricRsi'?1:3));
- const studyPanel=$('studyPanel');if(studyPanel){studyPanel.hidden=study==='none';set('chartIndicatorSummary',[ma?'MA20':null,bands?'BB':null,study==='none'?null:study.toUpperCase()].filter(Boolean).join(' · ')||'なし');if(study!=='none'){const series=studySeries(rows),sample=externalChart?(series.find(row=>row.time===selectionTime)||series.at(-1)):series.slice(-visibleCount)[hover??visibleCount-1]||series.at(-1);set('studyTitle',study==='rsi'?'RSI 14':'MACD 12,26,9');set('studyLegend',study==='rsi'?'基準線 30 / 50 / 70':'MACD / Signal / 差分');const value=study==='rsi'?number(sample.rsi,1):number(sample.macd);set('studyValue',value);const svg=$('studyChart');svg.setAttribute('viewBox',`0 0 ${width} 92`);svg.setAttribute('aria-description',study==='rsi'?'0から100の範囲、30・50・70の基準線を表示':'青線はMACD、黄線はシグナル線、棒はMACDとシグナル線の差分');svg.setAttribute('aria-label',(study==='rsi'?'RSI 14':'MACD 12,26,9')+' '+((externalChart?selectionTime===null:hover===null)?'最新':'選択足')+' '+value+(study==='macd'?'、シグナル線 '+number(sample.signal)+'、差分 '+number(sample.histogram):'')+'、ローソク足と同じ仮想データから計算');if(!externalChart)svg.innerHTML=studySvg(series,{kind:study,count:visibleCount,width,hover})}}const chart=$('chart');if(chart){chart.setAttribute('viewBox',`0 0 ${width} ${height}`);chart.dataset.count=String(visibleCount);chart.dataset.width=String(width);if(!externalChart)chart.innerHTML=chartSvg(rows,{ma,bands,hover,width,height,maxBars,timeLabel:running?row=>{const ts=simulationTimestamp(checkpoint,row.time);return ts?shortTime(ts):'T'+row.time}:null})}set('visibleRange','直近'+visibleCount+'本を表示');const inspected=externalChart?selectionTime!==null:hover!==null,current=externalChart?(rows.find(row=>row.time===selectionTime)||last):data[hover??data.length-1]||last;const selectedAt=simulationTimestamp(checkpoint,current.time);set('selectedCandle',inspected?(selectedAt?shortTime(selectedAt)+' JST':'T'+current.time):'最新');set('axisTimeBasis',running?'JST · 1本＝1ステップ':'生成順 · 1本＝1ステップ');$('followLatest')?.setAttribute('aria-pressed',String(hover===null));for(const k of ['open','high','low','close'])set('ohlc-'+k,number(current[k]));
- const tbody=$('candleRows');if(tbody)tbody.innerHTML=rows.slice(-10).reverse().map(c=>{const stamp=simulationTimestamp(checkpoint,c.time),label=stamp?`<time datetime="${stamp}" title="${stamp}">${shortTime(stamp)}</time><small class="step-reference">T${c.time}</small>`:'T'+String(c.time).padStart(3,'0');return `<tr><td class="mono">${label}</td><td>${number(c.open)}</td><td>${number(c.high)}</td><td>${number(c.low)}</td><td class="weight">${number(c.close)}</td><td class="${c.close>=c.open?'positive':'negative'}">${c.close>=c.open?'+':''}${number((c.close/c.open-1)*100,3)}%</td></tr>`}).join('');
+ const studyPanel=$('studyPanel');if(studyPanel){studyPanel.hidden=study==='none';set('chartIndicatorSummary',[ma?'MA20':null,bands?'BB':null,study==='none'?null:study.toUpperCase()].filter(Boolean).join(' · ')||'なし');if(study!=='none'){const series=studySeries(rows),sample=externalChart?(series.find(row=>row.time===selectionTime)||series.at(-1)):series.slice(-visibleCount)[hover??visibleCount-1]||series.at(-1);set('studyTitle',study==='rsi'?'RSI 14':'MACD 12,26,9');set('studyLegend',study==='rsi'?'基準線 30 / 50 / 70':'MACD / Signal / 差分');const value=study==='rsi'?number(sample.rsi,1):number(sample.macd);set('studyValue',value);const svg=$('studyChart');svg.setAttribute('viewBox',`0 0 ${width} 92`);svg.setAttribute('aria-description',study==='rsi'?'0から100の範囲、30・50・70の基準線を表示':'青線はMACD、黄線はシグナル線、棒はMACDとシグナル線の差分');svg.setAttribute('aria-label',(study==='rsi'?'RSI 14':'MACD 12,26,9')+' '+((externalChart?selectionTime===null:hover===null)?'最新':'選択足')+' '+value+(study==='macd'?'、シグナル線 '+number(sample.signal)+'、差分 '+number(sample.histogram):'')+'、ローソク足と同じ仮想データから計算');if(!externalChart)svg.innerHTML=studySvg(series,{kind:study,count:visibleCount,width,hover})}}const chart=$('chart');if(chart){chart.setAttribute('viewBox',`0 0 ${width} ${height}`);chart.dataset.count=String(visibleCount);chart.dataset.width=String(width);if(!externalChart)chart.innerHTML=chartSvg(rows,{ma,bands,hover,width,height,maxBars,timeLabel:(running||marketView)?row=>{const ts=timestamp(row.time);return ts?shortTime(ts):'T'+row.time}:null})}set('visibleRange','直近'+visibleCount+'本を表示');const inspected=externalChart?selectionTime!==null:hover!==null,current=externalChart?(rows.find(row=>row.time===selectionTime)||last):data[hover??data.length-1]||last;const selectedAt=timestamp(current.time);set('selectedCandle',inspected?(selectedAt?shortTime(selectedAt)+' JST':'T'+current.time):'最新');set('axisTimeBasis',periodLabel?periodLabel+' · JST':running?'JST · 1本＝1ステップ':'生成順 · 1本＝1ステップ');$('followLatest')?.setAttribute('aria-pressed',String(hover===null));for(const k of ['open','high','low','close'])set('ohlc-'+k,number(current[k]));
+ const status=$('chartBarStatus');
+ if(status){
+  status.hidden=!marketView||inspected;
+  if(marketView)set('chartBarStatus',marketView.running?(marketView.remaining?'確定まで '+marketView.remaining+'秒':'確定'):'停止中');
+ }
+ const tbody=$('candleRows');if(tbody)tbody.innerHTML=rows.slice(-10).reverse().map(c=>{const stamp=timestamp(c.time),label=stamp?`<time datetime="${stamp}" title="${stamp}">${shortTime(stamp)}</time>${marketView?(marketView.running&&marketView.remaining&&c===last?'<small class="bar-forming">形成中</small>':''):`<small class="step-reference">T${c.time}</small>`}`:'T'+String(c.time).padStart(3,'0');return `<tr><td class="mono">${label}</td><td>${number(c.open)}</td><td>${number(c.high)}</td><td>${number(c.low)}</td><td class="weight">${number(c.close)}</td><td class="${c.close>=c.open?'positive':'negative'}">${c.close>=c.open?'+':''}${number((c.close/c.open-1)*100,3)}%</td></tr>`}).join('');
  set('announcementText',record.announcement);if($('announcement'))$('announcement').hidden=!record.announcement;
 }
 export function renderEvents(document,events){

@@ -95,7 +95,7 @@ test('six level names identify the selected level and explain independently conf
 
 test('display colors and candle count persist locally without publishing and touch drag selects candles',async()=>{const a=await boot();try{
  const colors=a.document.getElementById('colorConvention');assert.equal(colors.value,'jp');colors.value='intl';colors.dispatchEvent(new a.window.Event('change'));assert.equal(a.document.documentElement.dataset.colors,'intl');
- a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','ma','maxBars','study']);
+ a.document.querySelector('[data-viewbars="36"]').click();const preferences=JSON.parse(a.window.localStorage.getItem('fx-demo-display-v1'));assert.equal(preferences.colors,'intl');assert.equal(preferences.maxBars,36);assert.deepEqual(Object.keys(preferences).sort(),['bands','changeBase','colors','ma','maxBars','period','study']);
  const chart=a.document.getElementById('chart');chart.dispatchEvent(new a.window.PointerEvent('pointerdown',{clientX:22,pointerType:'touch',pointerId:1,bubbles:true}));const first=a.document.getElementById('ohlc-open').textContent;chart.dispatchEvent(new a.window.PointerEvent('pointermove',{clientX:300,pointerType:'touch',pointerId:1,bubbles:true}));assert.notEqual(a.document.getElementById('ohlc-open').textContent,first);chart.dispatchEvent(new a.window.PointerEvent('pointerup',{pointerId:1,pointerType:'touch',bubbles:true}));assert.equal(a.publishCalls,0);
 }finally{await a.close()}});
 
