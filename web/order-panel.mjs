@@ -227,7 +227,6 @@ export function mountOrderPanel({document,window,getQuote,getScene,getInstrument
   }));
   $('orderEmptyPositions').hidden = openPositions.length > 0;
   $('orderEmptyHistory').hidden = fills.length > 0;
-  $('legacyTradeNote').hidden=!openPositions.some(position=>!isManaged(position));
   onOrdersChange(currentOrders);
   updateQuote();
  }
