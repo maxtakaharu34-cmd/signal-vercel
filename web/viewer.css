@@ -129,7 +129,6 @@ body[data-page=viewer] .chart-balance {
   margin-inline-end:auto;
   color:var(--text);
 }
-body[data-page=viewer] .chart-balance small {font-size:10px;color:var(--muted)}
 body[data-page=viewer] .chart-balance strong {font-size:14px;font-weight:650}
 body[data-page=viewer] .chart-balance .icon {width:14px;color:var(--muted)}
 body[data-page=viewer] .order-side-button {
